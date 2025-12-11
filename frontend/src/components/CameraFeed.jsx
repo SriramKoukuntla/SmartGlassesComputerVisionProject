@@ -1,12 +1,21 @@
 import React, { useRef, useEffect, useState } from 'react'
+import DetectionTerminal from './DetectionTerminal'
 import './CameraFeed.css'
 
 const CameraFeed = () => {
   const videoRef = useRef(null)
+  const canvasRef = useRef(null)
+  const overlayCanvasRef = useRef(null)
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState(null)
   const [devices, setDevices] = useState([])
   const [selectedDeviceId, setSelectedDeviceId] = useState('')
+  const [detections, setDetections] = useState([])
+  const [currentFrameDetections, setCurrentFrameDetections] = useState([])
+  const [isProcessing, setIsProcessing] = useState(false)
+  const detectionIntervalRef = useRef(null)
+  
+  const API_URL = 'http://localhost:8000'
 
   // Get available video input devices
   useEffect(() => {
@@ -33,6 +42,61 @@ const CameraFeed = () => {
     getDevices()
   }, [])
 
+  // Function to capture frame and send to backend
+  const captureAndDetect = async () => {
+    if (!videoRef.current || !canvasRef.current || isProcessing) return
+
+    try {
+      const video = videoRef.current
+      const canvas = canvasRef.current
+      const ctx = canvas.getContext('2d')
+
+      // Set canvas dimensions to match video
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+
+      // Draw current video frame to canvas
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+      // Convert canvas to base64
+      const imageData = canvas.toDataURL('image/jpeg', 0.8)
+
+      setIsProcessing(true)
+
+      // Send to backend API
+      const response = await fetch(`${API_URL}/detect-base64`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ image: imageData }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Detection request failed')
+      }
+
+      const data = await response.json()
+
+      // Update detections state for terminal
+      if (data.detections && data.detections.length > 0) {
+        setDetections(prev => {
+          // Keep last 50 detections
+          const newDetections = [...prev, ...data.detections]
+          return newDetections.slice(-50)
+        })
+        // Store current frame detections for drawing boxes
+        setCurrentFrameDetections(data.detections)
+      } else {
+        setCurrentFrameDetections([])
+      }
+    } catch (err) {
+      console.error('Error detecting objects:', err)
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
   useEffect(() => {
     let stream = null
 
@@ -44,6 +108,12 @@ const CameraFeed = () => {
         if (videoRef.current && videoRef.current.srcObject) {
           const existingStream = videoRef.current.srcObject
           existingStream.getTracks().forEach(track => track.stop())
+        }
+
+        // Clear any existing detection interval
+        if (detectionIntervalRef.current) {
+          clearInterval(detectionIntervalRef.current)
+          detectionIntervalRef.current = null
         }
 
         // Request camera access with specific device
@@ -59,6 +129,11 @@ const CameraFeed = () => {
           videoRef.current.srcObject = stream
           setIsStreaming(true)
           setError(null)
+
+          // Start detection loop (every 500ms)
+          detectionIntervalRef.current = setInterval(() => {
+            captureAndDetect()
+          }, 500)
         }
       } catch (err) {
         console.error('Error accessing camera:', err)
@@ -76,6 +151,10 @@ const CameraFeed = () => {
       if (stream) {
         stream.getTracks().forEach(track => track.stop())
       }
+      if (detectionIntervalRef.current) {
+        clearInterval(detectionIntervalRef.current)
+        detectionIntervalRef.current = null
+      }
     }
   }, [selectedDeviceId])
 
@@ -85,6 +164,22 @@ const CameraFeed = () => {
       stream.getTracks().forEach(track => track.stop())
       videoRef.current.srcObject = null
       setIsStreaming(false)
+    }
+    
+    // Clear detection interval
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current)
+      detectionIntervalRef.current = null
+    }
+
+    // Clear detections and boxes
+    setCurrentFrameDetections([])
+    setDetections([])
+    
+    // Clear overlay canvas
+    if (overlayCanvasRef.current) {
+      const ctx = overlayCanvasRef.current.getContext('2d')
+      ctx.clearRect(0, 0, overlayCanvasRef.current.width, overlayCanvasRef.current.height)
     }
   }
 
@@ -101,6 +196,12 @@ const CameraFeed = () => {
         existingStream.getTracks().forEach(track => track.stop())
       }
 
+      // Clear any existing detection interval
+      if (detectionIntervalRef.current) {
+        clearInterval(detectionIntervalRef.current)
+        detectionIntervalRef.current = null
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           deviceId: { exact: selectedDeviceId },
@@ -113,6 +214,11 @@ const CameraFeed = () => {
         videoRef.current.srcObject = stream
         setIsStreaming(true)
         setError(null)
+
+        // Start detection loop (every 500ms)
+        detectionIntervalRef.current = setInterval(() => {
+          captureAndDetect()
+        }, 500)
       }
     } catch (err) {
       console.error('Error accessing camera:', err)
@@ -125,6 +231,91 @@ const CameraFeed = () => {
     setSelectedDeviceId(event.target.value)
   }
 
+  // Draw bounding boxes on overlay canvas
+  useEffect(() => {
+    const drawBoxes = () => {
+      if (!overlayCanvasRef.current || !videoRef.current || currentFrameDetections.length === 0) {
+        // Clear canvas if no detections
+        if (overlayCanvasRef.current) {
+          const ctx = overlayCanvasRef.current.getContext('2d')
+          ctx.clearRect(0, 0, overlayCanvasRef.current.width, overlayCanvasRef.current.height)
+        }
+        return
+      }
+
+      const video = videoRef.current
+      const overlayCanvas = overlayCanvasRef.current
+      const ctx = overlayCanvas.getContext('2d')
+
+      // Get video display dimensions
+      const videoRect = video.getBoundingClientRect()
+      const videoDisplayWidth = videoRect.width
+      const videoDisplayHeight = videoRect.height
+      const videoActualWidth = video.videoWidth
+      const videoActualHeight = video.videoHeight
+
+      if (videoActualWidth === 0 || videoActualHeight === 0) return
+
+      // Set overlay canvas size to match video display size
+      overlayCanvas.width = videoDisplayWidth
+      overlayCanvas.height = videoDisplayHeight
+
+      // Calculate scale factors
+      const scaleX = videoDisplayWidth / videoActualWidth
+      const scaleY = videoDisplayHeight / videoActualHeight
+
+      // Clear previous drawings
+      ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height)
+
+      // Draw bounding boxes (accounting for video mirroring)
+      currentFrameDetections.forEach((detection) => {
+        const { bbox, class: className, confidence } = detection
+
+        // Scale bounding box coordinates to display size
+        // Mirror horizontally: x = width - x (because video is mirrored)
+        const x1 = videoDisplayWidth - (bbox.x2 * scaleX)
+        const y1 = bbox.y1 * scaleY
+        const x2 = videoDisplayWidth - (bbox.x1 * scaleX)
+        const y2 = bbox.y2 * scaleY
+        const width = x2 - x1
+        const height = y2 - y1
+
+        // Draw bounding box
+        ctx.strokeStyle = '#00ff00'
+        ctx.lineWidth = 3
+        ctx.strokeRect(x1, y1, width, height)
+
+        // Draw label background
+        const labelText = `${className} ${confidence}%`
+        ctx.font = 'bold 16px Arial'
+        const textMetrics = ctx.measureText(labelText)
+        const labelWidth = textMetrics.width + 10
+        const labelHeight = 24
+
+        // Position label at top-left of box
+        const labelX = Math.min(x1, x2)
+        const labelY = Math.max(0, Math.min(y1, y2) - labelHeight)
+
+        ctx.fillStyle = 'rgba(0, 255, 0, 0.8)'
+        ctx.fillRect(labelX, labelY, labelWidth, labelHeight)
+
+        // Draw label text
+        ctx.fillStyle = '#000000'
+        ctx.fillText(labelText, labelX + 5, labelY + 18)
+      })
+    }
+
+    drawBoxes()
+
+    // Redraw on window resize
+    const handleResize = () => {
+      drawBoxes()
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [currentFrameDetections])
+
   return (
     <div className="camera-container">
       <div className="video-wrapper">
@@ -136,13 +327,20 @@ const CameraFeed = () => {
             </button>
           </div>
         ) : (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="camera-video"
-          />
+          <>
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="camera-video"
+            />
+            <canvas 
+              ref={overlayCanvasRef} 
+              className="overlay-canvas"
+            />
+            <canvas ref={canvasRef} style={{ display: 'none' }} />
+          </>
         )}
       </div>
       
@@ -194,6 +392,11 @@ const CameraFeed = () => {
             Camera Active
           </div>
         )}
+
+        <DetectionTerminal 
+          detections={detections} 
+          isProcessing={isProcessing}
+        />
       </div>
     </div>
   )

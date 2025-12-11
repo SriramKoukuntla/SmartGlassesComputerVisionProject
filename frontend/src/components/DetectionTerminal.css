@@ -1,0 +1,143 @@
+.detection-terminal {
+  width: 100%;
+  max-width: 400px;
+  min-width: 400px;
+  flex: 1;
+  min-height: 0;
+  background: #1e1e1e;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  font-family: 'Courier New', monospace;
+  flex-shrink: 0;
+}
+
+.terminal-header {
+  background: #2d2d2d;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #3d3d3d;
+}
+
+.terminal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.terminal-icon {
+  font-size: 1.2rem;
+}
+
+.terminal-status {
+  display: flex;
+  align-items: center;
+  min-width: 100px;
+  justify-content: flex-end;
+}
+
+.status-ready {
+  color: #27ae60;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.status-processing {
+  color: #f39c12;
+  font-size: 0.85rem;
+  font-weight: 500;
+  animation: pulse-text 1.5s infinite;
+}
+
+@keyframes pulse-text {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.terminal-body {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  color: #d4d4d4;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.terminal-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.terminal-body::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+.terminal-body::-webkit-scrollbar-thumb {
+  background: #4d4d4d;
+  border-radius: 4px;
+}
+
+.terminal-body::-webkit-scrollbar-thumb:hover {
+  background: #5d5d5d;
+}
+
+.terminal-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 4px 0;
+}
+
+.terminal-prompt {
+  color: #27ae60;
+  font-weight: bold;
+}
+
+.terminal-text {
+  color: #d4d4d4;
+}
+
+.terminal-timestamp {
+  color: #7f8c8d;
+  font-size: 0.85rem;
+  min-width: 100px;
+}
+
+.terminal-class {
+  color: #3498db;
+  font-weight: 600;
+  text-transform: capitalize;
+  min-width: 120px;
+}
+
+.terminal-confidence {
+  color: #e74c3c;
+  font-weight: 500;
+}
+
+.terminal-footer {
+  background: #2d2d2d;
+  padding: 10px 16px;
+  border-top: 1px solid #3d3d3d;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.terminal-count {
+  color: #bdc3c7;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
