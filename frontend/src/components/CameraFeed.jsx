@@ -11,7 +11,9 @@ const CameraFeed = () => {
   const [devices, setDevices] = useState([])
   const [selectedDeviceId, setSelectedDeviceId] = useState('')
   const [detections, setDetections] = useState([])
+  const [textDetections, setTextDetections] = useState([])
   const [currentFrameDetections, setCurrentFrameDetections] = useState([])
+  const [currentFrameTextDetections, setCurrentFrameTextDetections] = useState([])
   const [isProcessing, setIsProcessing] = useState(false)
   const detectionIntervalRef = useRef(null)
   
@@ -78,7 +80,7 @@ const CameraFeed = () => {
 
       const data = await response.json()
 
-      // Update detections state for terminal
+      // Update object detections state for terminal
       if (data.detections && data.detections.length > 0) {
         setDetections(prev => {
           // Keep last 50 detections
@@ -89,6 +91,19 @@ const CameraFeed = () => {
         setCurrentFrameDetections(data.detections)
       } else {
         setCurrentFrameDetections([])
+      }
+
+      // Update text detections state for terminal
+      if (data.text_detections && data.text_detections.length > 0) {
+        setTextDetections(prev => {
+          // Keep last 50 text detections
+          const newTextDetections = [...prev, ...data.text_detections]
+          return newTextDetections.slice(-50)
+        })
+        // Store current frame text detections for drawing boxes
+        setCurrentFrameTextDetections(data.text_detections)
+      } else {
+        setCurrentFrameTextDetections([])
       }
     } catch (err) {
       console.error('Error detecting objects:', err)
@@ -175,6 +190,8 @@ const CameraFeed = () => {
     // Clear detections and boxes
     setCurrentFrameDetections([])
     setDetections([])
+    setCurrentFrameTextDetections([])
+    setTextDetections([])
     
     // Clear overlay canvas
     if (overlayCanvasRef.current) {
@@ -234,8 +251,8 @@ const CameraFeed = () => {
   // Draw bounding boxes on overlay canvas
   useEffect(() => {
     const drawBoxes = () => {
-      if (!overlayCanvasRef.current || !videoRef.current || currentFrameDetections.length === 0) {
-        // Clear canvas if no detections
+      if (!overlayCanvasRef.current || !videoRef.current) {
+        // Clear canvas if no video
         if (overlayCanvasRef.current) {
           const ctx = overlayCanvasRef.current.getContext('2d')
           ctx.clearRect(0, 0, overlayCanvasRef.current.width, overlayCanvasRef.current.height)
@@ -267,7 +284,7 @@ const CameraFeed = () => {
       // Clear previous drawings
       ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height)
 
-      // Draw bounding boxes (accounting for video mirroring)
+      // Draw object detection bounding boxes (accounting for video mirroring)
       currentFrameDetections.forEach((detection) => {
         const { bbox, class: className, confidence } = detection
 
@@ -280,7 +297,7 @@ const CameraFeed = () => {
         const width = x2 - x1
         const height = y2 - y1
 
-        // Draw bounding box
+        // Draw bounding box (green for objects)
         ctx.strokeStyle = '#00ff00'
         ctx.lineWidth = 3
         ctx.strokeRect(x1, y1, width, height)
@@ -303,6 +320,43 @@ const CameraFeed = () => {
         ctx.fillStyle = '#000000'
         ctx.fillText(labelText, labelX + 5, labelY + 18)
       })
+
+      // Draw text detection bounding boxes (accounting for video mirroring)
+      currentFrameTextDetections.forEach((detection) => {
+        const { bbox, text, confidence } = detection
+
+        // Scale bounding box coordinates to display size
+        // Mirror horizontally: x = width - x (because video is mirrored)
+        const x1 = videoDisplayWidth - (bbox.x2 * scaleX)
+        const y1 = bbox.y1 * scaleY
+        const x2 = videoDisplayWidth - (bbox.x1 * scaleX)
+        const y2 = bbox.y2 * scaleY
+        const width = x2 - x1
+        const height = y2 - y1
+
+        // Draw bounding box (blue for text)
+        ctx.strokeStyle = '#0080ff'
+        ctx.lineWidth = 3
+        ctx.strokeRect(x1, y1, width, height)
+
+        // Draw label background
+        const labelText = `"${text}" ${confidence}%`
+        ctx.font = 'bold 16px Arial'
+        const textMetrics = ctx.measureText(labelText)
+        const labelWidth = textMetrics.width + 10
+        const labelHeight = 24
+
+        // Position label at top-left of box
+        const labelX = Math.min(x1, x2)
+        const labelY = Math.max(0, Math.min(y1, y2) - labelHeight)
+
+        ctx.fillStyle = 'rgba(0, 128, 255, 0.8)'
+        ctx.fillRect(labelX, labelY, labelWidth, labelHeight)
+
+        // Draw label text
+        ctx.fillStyle = '#ffffff'
+        ctx.fillText(labelText, labelX + 5, labelY + 18)
+      })
     }
 
     drawBoxes()
@@ -314,7 +368,7 @@ const CameraFeed = () => {
 
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
-  }, [currentFrameDetections])
+  }, [currentFrameDetections, currentFrameTextDetections])
 
   return (
     <div className="camera-container">
@@ -394,7 +448,8 @@ const CameraFeed = () => {
         )}
 
         <DetectionTerminal 
-          detections={detections} 
+          detections={detections}
+          textDetections={textDetections}
           isProcessing={isProcessing}
         />
       </div>

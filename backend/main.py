@@ -7,6 +7,7 @@ from PIL import Image
 import io
 from typing import List, Dict
 import base64
+import easyocr
 
 app = FastAPI()
 
@@ -24,14 +25,60 @@ print("Loading YOLOv11n model...")
 model = YOLO('yolo11n.pt')
 print("Model loaded successfully!")
 
+# Initialize EasyOCR reader
+print("Loading EasyOCR model...")
+ocr_reader = easyocr.Reader(['en'], gpu=False)  # Use GPU if available, otherwise CPU
+print("EasyOCR model loaded successfully!")
+
 @app.get("/")
 def read_root():
     return {"message": "Smart Glasses Backend API", "status": "running"}
 
+def perform_ocr(img):
+    """
+    Perform OCR on the image and return text detections
+    """
+    try:
+        # Run OCR
+        ocr_results = ocr_reader.readtext(img)
+        
+        text_detections = []
+        for (bbox, text, confidence) in ocr_results:
+            # bbox is a list of 4 points: [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
+            # Convert to x1, y1, x2, y2 format
+            # Convert numpy types to Python native types
+            x_coords = [float(point[0]) for point in bbox]
+            y_coords = [float(point[1]) for point in bbox]
+            x1 = float(min(x_coords))
+            y1 = float(min(y_coords))
+            x2 = float(max(x_coords))
+            y2 = float(max(y_coords))
+            
+            # Convert confidence to Python float
+            conf_value = float(confidence) * 100
+            
+            text_detections.append({
+                "text": str(text),  # Ensure text is a string
+                "confidence": round(conf_value, 2),
+                "bbox": {
+                    "x1": round(x1, 2),
+                    "y1": round(y1, 2),
+                    "x2": round(x2, 2),
+                    "y2": round(y2, 2)
+                }
+            })
+        
+        return text_detections
+    except Exception as e:
+        print(f"OCR error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return []
+
 @app.post("/detect")
 async def detect_objects(file: UploadFile = File(...)):
     """
-    Process an image and return object detections
+    Process an image and return object detections and text recognition
     """
     try:
         # Read image file
@@ -69,9 +116,14 @@ async def detect_objects(file: UploadFile = File(...)):
                     }
                 })
         
+        # Perform OCR for text recognition
+        text_detections = perform_ocr(img)
+        
         return {
             "detections": detections,
-            "count": len(detections)
+            "text_detections": text_detections,
+            "count": len(detections),
+            "text_count": len(text_detections)
         }
     
     except Exception as e:
@@ -80,7 +132,7 @@ async def detect_objects(file: UploadFile = File(...)):
 @app.post("/detect-base64")
 async def detect_objects_base64(data: dict):
     """
-    Process a base64 encoded image and return object detections
+    Process a base64 encoded image and return object detections and text recognition
     """
     try:
         # Extract base64 image data
@@ -127,9 +179,14 @@ async def detect_objects_base64(data: dict):
                     }
                 })
         
+        # Perform OCR for text recognition
+        text_detections = perform_ocr(img)
+        
         return {
             "detections": detections,
-            "count": len(detections)
+            "text_detections": text_detections,
+            "count": len(detections),
+            "text_count": len(text_detections)
         }
     
     except Exception as e:
