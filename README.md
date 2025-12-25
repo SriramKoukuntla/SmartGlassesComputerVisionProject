@@ -4,7 +4,7 @@ I am using react frontend to see changes I am doing to OCR, Objection Detection,
 
 Starting Backend:
 1. Activate virtual environment: "./venv/Scripts/activate"
-2. Start up python program: "python main.py"
+2. Start up python program: "python -m app.main"
 
 Starting Frontend:
 1. npm install
