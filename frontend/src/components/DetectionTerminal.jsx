@@ -51,14 +51,19 @@ const DetectionTerminal = ({ detections, ocrTextDetections = [], isProcessing })
                 <span className="terminal-confidence">{detection.confidence}%</span>
               </div>
             ))}
-            {ocrTextDetections.map((ocrDetection, index) => (
-              <div key={`ocr-${index}`} className="terminal-line">
-                <span className="terminal-timestamp">[{formatTimestamp()}]</span>
-                <span className="terminal-prompt">OCR:</span>
-                <span className="terminal-text">{ocrDetection.text}</span>
-                <span className="terminal-confidence">{ocrDetection.confidence}%</span>
-              </div>
-            ))}
+            {ocrTextDetections.map((ocrDetection, index) => {
+              // OCR detection format: [text, confidence, polygon]
+              const text = Array.isArray(ocrDetection) ? ocrDetection[0] : ocrDetection.text || 'Unknown'
+              const confidence = Array.isArray(ocrDetection) ? (ocrDetection[1] * 100).toFixed(1) : (ocrDetection.confidence || 0).toFixed(1)
+              return (
+                <div key={`ocr-${index}`} className="terminal-line">
+                  <span className="terminal-timestamp">[{formatTimestamp()}]</span>
+                  <span className="terminal-prompt">OCR:</span>
+                  <span className="terminal-text">{text}</span>
+                  <span className="terminal-confidence">{confidence}%</span>
+                </div>
+              )
+            })}
           </>
         )}
       </div>

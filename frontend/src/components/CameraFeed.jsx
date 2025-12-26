@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react'
+import React, { useRef, useEffect, useState, useCallback } from 'react'
 import DetectionTerminal from './DetectionTerminal'
 import './CameraFeed.css'
 
@@ -13,8 +13,10 @@ const CameraFeed = () => {
   const [detections, setDetections] = useState([])
   const [currentFrameDetections, setCurrentFrameDetections] = useState([])
   const [ocrTextDetections, setOcrTextDetections] = useState([])
+  const [currentFrameOcrDetections, setCurrentFrameOcrDetections] = useState([])
   const [isProcessing, setIsProcessing] = useState(false)
   const [flipImage, setFlipImage] = useState(false)
+  const [requestInterval, setRequestInterval] = useState(500) // milliseconds between requests
   const detectionIntervalRef = useRef(null)
   
   const API_URL = 'http://localhost:8000'
@@ -45,7 +47,7 @@ const CameraFeed = () => {
   }, [])
 
   // Function to capture frame and send to backend
-  const captureAndDetect = async () => {
+  const captureAndDetect = useCallback(async () => {
     if (!videoRef.current || !canvasRef.current || isProcessing) return
 
     try {
@@ -107,26 +109,34 @@ const CameraFeed = () => {
         setCurrentFrameDetections([])
       }
 
-      // Update OCR text detections state for terminal
+      // Update OCR text detections state for terminal and drawing
       if (ocrTextDetections.length > 0) {
         setOcrTextDetections(prev => {
           // Keep last 50 OCR detections
           const newOcrDetections = [...prev, ...ocrTextDetections]
           return newOcrDetections.slice(-50)
         })
+        // Store current frame OCR detections for drawing boxes
+        setCurrentFrameOcrDetections(ocrTextDetections)
+      } else {
+        setCurrentFrameOcrDetections([])
       }
     } catch (err) {
       console.error('Error detecting objects:', err)
     } finally {
       setIsProcessing(false)
     }
-  }
+  }, [isProcessing, flipImage, API_URL])
+
+  // Track if camera was explicitly stopped by user
+  const cameraStoppedRef = useRef(false)
 
   useEffect(() => {
     let stream = null
 
     const startCamera = async () => {
-      if (!selectedDeviceId) return
+      // Don't auto-start if user explicitly stopped the camera
+      if (!selectedDeviceId || cameraStoppedRef.current) return
 
       try {
         // Stop existing stream if any
@@ -154,11 +164,12 @@ const CameraFeed = () => {
           videoRef.current.srcObject = stream
           setIsStreaming(true)
           setError(null)
+          cameraStoppedRef.current = false // Reset stopped flag when starting
 
-          // Start detection loop (every 500ms)
+          // Start detection loop with configurable interval
           detectionIntervalRef.current = setInterval(() => {
             captureAndDetect()
-          }, 500)
+          }, requestInterval)
         }
       } catch (err) {
         console.error('Error accessing camera:', err)
@@ -167,7 +178,7 @@ const CameraFeed = () => {
       }
     }
 
-    if (selectedDeviceId) {
+    if (selectedDeviceId && !cameraStoppedRef.current) {
       startCamera()
     }
 
@@ -181,12 +192,31 @@ const CameraFeed = () => {
         detectionIntervalRef.current = null
       }
     }
-  }, [selectedDeviceId])
+  }, [selectedDeviceId, captureAndDetect, requestInterval])
+
+  // Update detection interval when requestInterval changes (without restarting camera)
+  useEffect(() => {
+    if (isStreaming && detectionIntervalRef.current) {
+      // Clear existing interval
+      clearInterval(detectionIntervalRef.current)
+      // Start new interval with updated frequency
+      detectionIntervalRef.current = setInterval(() => {
+        captureAndDetect()
+      }, requestInterval)
+    }
+  }, [requestInterval, isStreaming, captureAndDetect])
 
   const stopCamera = () => {
+    // Mark camera as explicitly stopped
+    cameraStoppedRef.current = true
+    
     if (videoRef.current && videoRef.current.srcObject) {
       const stream = videoRef.current.srcObject
-      stream.getTracks().forEach(track => track.stop())
+      // Stop all tracks to release the camera
+      stream.getTracks().forEach(track => {
+        track.stop()
+        track.enabled = false
+      })
       videoRef.current.srcObject = null
       setIsStreaming(false)
     }
@@ -199,6 +229,7 @@ const CameraFeed = () => {
 
     // Clear detections and boxes
     setCurrentFrameDetections([])
+    setCurrentFrameOcrDetections([])
     setDetections([])
     setOcrTextDetections([])
     
@@ -214,6 +245,9 @@ const CameraFeed = () => {
       setError('Please select a camera device.')
       return
     }
+
+    // Reset stopped flag when user explicitly starts camera
+    cameraStoppedRef.current = false
 
     try {
       // Stop existing stream if any
@@ -241,10 +275,10 @@ const CameraFeed = () => {
         setIsStreaming(true)
         setError(null)
 
-        // Start detection loop (every 500ms)
+        // Start detection loop with configurable interval
         detectionIntervalRef.current = setInterval(() => {
           captureAndDetect()
-        }, 500)
+        }, requestInterval)
       }
     } catch (err) {
       console.error('Error accessing camera:', err)
@@ -260,8 +294,8 @@ const CameraFeed = () => {
   // Draw bounding boxes on overlay canvas
   useEffect(() => {
     const drawBoxes = () => {
-      if (!overlayCanvasRef.current || !videoRef.current || currentFrameDetections.length === 0) {
-        // Clear canvas if no detections
+      if (!overlayCanvasRef.current || !videoRef.current) {
+        // Clear canvas if no video
         if (overlayCanvasRef.current) {
           const ctx = overlayCanvasRef.current.getContext('2d')
           ctx.clearRect(0, 0, overlayCanvasRef.current.width, overlayCanvasRef.current.height)
@@ -293,7 +327,7 @@ const CameraFeed = () => {
       // Clear previous drawings
       ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height)
 
-      // Draw bounding boxes (accounting for video mirroring/flipping)
+      // Draw YOLO bounding boxes (accounting for video mirroring/flipping)
       currentFrameDetections.forEach((detection) => {
         const { bbox, class: className, confidence } = detection
 
@@ -315,13 +349,13 @@ const CameraFeed = () => {
         const width = x2 - x1
         const height = y2 - y1
 
-        // Draw bounding box
+        // Draw bounding box (green for YOLO)
         ctx.strokeStyle = '#00ff00'
         ctx.lineWidth = 3
         ctx.strokeRect(x1, y1, width, height)
 
         // Draw label background
-        const labelText = `${className} ${confidence}%`
+        const labelText = `${className} ${confidence.toFixed(1)}%`
         ctx.font = 'bold 16px Arial'
         const textMetrics = ctx.measureText(labelText)
         const labelWidth = textMetrics.width + 10
@@ -338,6 +372,66 @@ const CameraFeed = () => {
         ctx.fillStyle = '#000000'
         ctx.fillText(labelText, labelX + 5, labelY + 18)
       })
+
+      // Draw OCR text boxes (polygon-based)
+      currentFrameOcrDetections.forEach((ocrDetection) => {
+        // OCR detection format: [text, confidence, polygon]
+        const [text, confidence, polygon] = ocrDetection
+
+        if (!polygon || polygon.length !== 4) return
+
+        // Scale polygon coordinates to display size
+        const scaledPolygon = polygon.map(([x, y]) => {
+          let scaledX, scaledY
+          if (flipImage) {
+            // Video is not mirrored, use coordinates directly
+            scaledX = x * scaleX
+            scaledY = y * scaleY
+          } else {
+            // Video is mirrored, flip x coordinates
+            scaledX = videoDisplayWidth - (x * scaleX)
+            scaledY = y * scaleY
+          }
+          return [scaledX, scaledY]
+        })
+
+        // Draw polygon (blue for OCR)
+        ctx.strokeStyle = '#0066ff'
+        ctx.lineWidth = 3
+        ctx.beginPath()
+        ctx.moveTo(scaledPolygon[0][0], scaledPolygon[0][1])
+        for (let i = 1; i < scaledPolygon.length; i++) {
+          ctx.lineTo(scaledPolygon[i][0], scaledPolygon[i][1])
+        }
+        ctx.closePath()
+        ctx.stroke()
+
+        // Calculate bounding box for label positioning
+        const xs = scaledPolygon.map(p => p[0])
+        const ys = scaledPolygon.map(p => p[1])
+        const minX = Math.min(...xs)
+        const maxX = Math.max(...xs)
+        const minY = Math.min(...ys)
+        const maxY = Math.max(...ys)
+
+        // Draw label background
+        const labelText = `${text} ${(confidence * 100).toFixed(1)}%`
+        ctx.font = 'bold 16px Arial'
+        const textMetrics = ctx.measureText(labelText)
+        const labelWidth = textMetrics.width + 10
+        const labelHeight = 24
+
+        // Position label at top-left of polygon
+        const labelX = minX
+        const labelY = Math.max(0, minY - labelHeight)
+
+        ctx.fillStyle = 'rgba(0, 102, 255, 0.8)'
+        ctx.fillRect(labelX, labelY, labelWidth, labelHeight)
+
+        // Draw label text
+        ctx.fillStyle = '#ffffff'
+        ctx.fillText(labelText, labelX + 5, labelY + 18)
+      })
     }
 
     drawBoxes()
@@ -349,7 +443,7 @@ const CameraFeed = () => {
 
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
-  }, [currentFrameDetections, flipImage])
+  }, [currentFrameDetections, currentFrameOcrDetections, flipImage])
 
   return (
     <div className="camera-container">
@@ -432,6 +526,47 @@ const CameraFeed = () => {
             </button>
           )}
         </div>
+
+        {isStreaming && (
+          <div className="frequency-control-wrapper">
+            <label htmlFor="frequency-slider" className="frequency-label">
+              Request Frequency: {requestInterval}ms ({Math.round(1000 / requestInterval)} req/s)
+            </label>
+            <input
+              id="frequency-slider"
+              type="range"
+              min="100"
+              max="2000"
+              step="100"
+              value={requestInterval}
+              onChange={(e) => {
+                const newInterval = parseInt(e.target.value)
+                setRequestInterval(newInterval)
+              }}
+              className="frequency-slider"
+            />
+            <div className="frequency-presets">
+              <button
+                onClick={() => setRequestInterval(100)}
+                className={`frequency-preset ${requestInterval === 100 ? 'active' : ''}`}
+              >
+                Fast (10/s)
+              </button>
+              <button
+                onClick={() => setRequestInterval(500)}
+                className={`frequency-preset ${requestInterval === 500 ? 'active' : ''}`}
+              >
+                Medium (2/s)
+              </button>
+              <button
+                onClick={() => setRequestInterval(1000)}
+                className={`frequency-preset ${requestInterval === 1000 ? 'active' : ''}`}
+              >
+                Slow (1/s)
+              </button>
+            </div>
+          </div>
+        )}
 
         {isStreaming && (
           <div className="status-indicator">
