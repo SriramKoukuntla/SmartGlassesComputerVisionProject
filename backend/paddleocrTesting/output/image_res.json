@@ -2,44 +2,53 @@
     "input_path": "image.png",
     "page_index": null,
     "model_settings": {
-        "use_doc_preprocessor": false,
-        "use_textline_orientation": false
+        "use_doc_preprocessor": true,
+        "use_textline_orientation": true
+    },
+    "doc_preprocessor_res": {
+        "input_path": null,
+        "page_index": null,
+        "model_settings": {
+            "use_doc_orientation_classify": true,
+            "use_doc_unwarping": true
+        },
+        "angle": 180
     },
     "dt_polys": [
         [
             [
-                349,
-                309
+                63,
+                48
             ],
             [
-                390,
-                302
+                235,
+                48
             ],
             [
-                393,
-                317
+                235,
+                76
             ],
             [
-                352,
-                325
+                63,
+                76
             ]
         ],
         [
             [
-                490,
-                317
+                350,
+                91
             ],
             [
-                591,
-                275
+                401,
+                88
             ],
             [
-                599,
-                293
+                402,
+                108
             ],
             [
-                497,
-                335
+                351,
+                110
             ]
         ]
     ],
@@ -53,69 +62,69 @@
     },
     "text_type": "general",
     "textline_orientation_angles": [
-        -1,
-        -1
+        1,
+        0
     ],
     "text_rec_score_thresh": 0.0,
     "return_word_box": false,
     "rec_texts": [
-        "AWD",
-        "INFINITI"
+        "INFINITI",
+        "GAMA"
     ],
     "rec_scores": [
-        0.982948362827301,
-        0.9749936461448669
+        0.9825031757354736,
+        0.33823060989379883
     ],
     "rec_polys": [
         [
             [
-                349,
-                309
+                63,
+                48
             ],
             [
-                390,
-                302
+                235,
+                48
             ],
             [
-                393,
-                317
+                235,
+                76
             ],
             [
-                352,
-                325
+                63,
+                76
             ]
         ],
         [
             [
-                490,
-                317
+                350,
+                91
             ],
             [
-                591,
-                275
+                401,
+                88
             ],
             [
-                599,
-                293
+                402,
+                108
             ],
             [
-                497,
-                335
+                351,
+                110
             ]
         ]
     ],
     "rec_boxes": [
         [
-            349,
-            302,
-            393,
-            325
+            63,
+            48,
+            235,
+            76
         ],
         [
-            490,
-            275,
-            599,
-            335
+            350,
+            88,
+            402,
+            110
         ]
     ]
 }

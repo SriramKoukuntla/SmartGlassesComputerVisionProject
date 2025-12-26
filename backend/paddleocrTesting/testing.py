@@ -4,9 +4,9 @@ import time
 
 print(f"Initializing PaddleOCR model ")
 ocr = PaddleOCR(
-    use_doc_orientation_classify=False,
-    use_doc_unwarping=False,
-    use_textline_orientation=False)
+    use_doc_orientation_classify=True,
+    use_doc_unwarping=True,
+    use_textline_orientation=True)
 print("PaddleOCR model initialized successfully!")
 
 for i in range(6):
