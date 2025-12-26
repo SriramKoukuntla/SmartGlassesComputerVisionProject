@@ -172,17 +172,17 @@ def main():
     print(f"\n{'='*60}")
     
     # Optionally show output visualization (uncomment if needed)
-    # plt.figure(figsize=(12, 5))
-    # plt.subplot(1, 2, 1)
-    # plt.imshow(output_hybrid)
-    # plt.title("DPT_Hybrid Output")
-    # plt.axis('off')
-    # plt.subplot(1, 2, 2)
-    # plt.imshow(output_large)
-    # plt.title("DPT_Large Output")
-    # plt.axis('off')
-    # plt.tight_layout()
-    # plt.show()
+    plt.figure(figsize=(12, 5))
+    plt.subplot(1, 2, 1)
+    plt.imshow(output_hybrid)
+    plt.title("DPT_Hybrid Output")
+    plt.axis('off')
+    plt.subplot(1, 2, 2)
+    plt.imshow(output_large)
+    plt.title("DPT_Large Output")
+    plt.axis('off')
+    plt.tight_layout()
+    plt.show()
 
 
 if __name__ == "__main__":

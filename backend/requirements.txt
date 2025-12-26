@@ -1,3 +1,6 @@
+torch
+torchvision
+# Note: Install PyTorch with CUDA 13.0 from: pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu130
 ultralytics>=8.0.0
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
