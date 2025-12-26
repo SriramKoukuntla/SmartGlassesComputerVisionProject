@@ -3,13 +3,36 @@ import torch
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+import urllib.request
 
-def test_model_latency(model_name, num_iterations=5):
+def load_image_from_url(url):
+    """
+    Load an image from a URL.
+    
+    Args:
+        url: URL of the image to load
+    
+    Returns:
+        RGB image as numpy array
+    """
+    print(f"Downloading image from {url}...")
+    req = urllib.request.urlopen(url)
+    arr = np.asarray(bytearray(req.read()), dtype=np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if img is None:
+        raise ValueError(f"Failed to decode image from URL: {url}")
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    print(f"Image loaded successfully. Shape: {img.shape}")
+    return img
+
+
+def test_model_latency(model_name, img, num_iterations=5):
     """
     Test latency for a given MiDaS model.
     
     Args:
-        model_name: Name of the model ("DPT_Hybrid" or "DPT_Large")
+        model_name: Name of the model ("DPT_Hybrid", "DPT_Large", or "MiDaS_small")
+        img: RGB image as numpy array
         num_iterations: Number of iterations to run for latency testing
     
     Returns:
@@ -45,12 +68,6 @@ def test_model_latency(model_name, num_iterations=5):
         transform = midas_transforms.dpt_transform
     else:
         transform = midas_transforms.small_transform
-    
-    # Load image and convert to RGB
-    img = cv2.imread("image.png")
-    if img is None:
-        raise FileNotFoundError("image.png not found in current directory")
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     
     # Warm-up run (not counted in latency)
     print("Running warm-up inference...")
@@ -117,7 +134,7 @@ def test_model_latency(model_name, num_iterations=5):
 
 
 def main():
-    """Main function to test both models."""
+    """Main function to test all models."""
     print("MiDaS Model Latency Testing")
     print("="*60)
     
@@ -128,61 +145,86 @@ def main():
         print(f"GPU: {torch.cuda.get_device_name(0)}")
     print()
     
-    # Test both models
+    # Load test image from URL
+    image_url = "https://github.com/pytorch/hub/raw/master/images/dog.jpg"
+    try:
+        img = load_image_from_url(image_url)
+    except Exception as e:
+        print(f"Error loading image from URL: {e}")
+        return
+    
+    # Test all models
     results = {}
+    outputs = {}
     
     # Test DPT_Hybrid
     try:
-        stats_hybrid, output_hybrid = test_model_latency("DPT_Hybrid", num_iterations=5)
+        stats_hybrid, output_hybrid = test_model_latency("DPT_Hybrid", img, num_iterations=5)
         results['DPT_Hybrid'] = stats_hybrid
+        outputs['DPT_Hybrid'] = output_hybrid
     except Exception as e:
         print(f"Error testing DPT_Hybrid: {e}")
         results['DPT_Hybrid'] = None
+        outputs['DPT_Hybrid'] = None
     
     # Test DPT_Large
     try:
-        stats_large, output_large = test_model_latency("DPT_Large", num_iterations=5)
+        stats_large, output_large = test_model_latency("DPT_Large", img, num_iterations=5)
         results['DPT_Large'] = stats_large
+        outputs['DPT_Large'] = output_large
     except Exception as e:
         print(f"Error testing DPT_Large: {e}")
         results['DPT_Large'] = None
+        outputs['DPT_Large'] = None
+    
+    # Test MiDaS_small
+    try:
+        stats_small, output_small = test_model_latency("MiDaS_small", img, num_iterations=5)
+        results['MiDaS_small'] = stats_small
+        outputs['MiDaS_small'] = output_small
+    except Exception as e:
+        print(f"Error testing MiDaS_small: {e}")
+        results['MiDaS_small'] = None
+        outputs['MiDaS_small'] = None
     
     # Comparison
     print(f"\n{'='*60}")
     print("COMPARISON SUMMARY")
     print(f"{'='*60}")
     
-    if results['DPT_Hybrid'] and results['DPT_Large']:
-        hybrid_mean = results['DPT_Hybrid']['mean']
-        large_mean = results['DPT_Large']['mean']
+    # Collect valid results
+    valid_results = {k: v for k, v in results.items() if v is not None}
+    
+    if len(valid_results) > 0:
+        print("\nMean Latency Results:")
+        for model_name, stats in valid_results.items():
+            print(f"  {model_name}: {stats['mean']:.2f} ms")
         
-        print(f"\nDPT_Hybrid mean latency: {hybrid_mean:.2f} ms")
-        print(f"DPT_Large mean latency: {large_mean:.2f} ms")
-        
-        if hybrid_mean < large_mean:
-            faster = "DPT_Hybrid"
-            speedup = (large_mean / hybrid_mean - 1) * 100
-        else:
-            faster = "DPT_Large"
-            speedup = (hybrid_mean / large_mean - 1) * 100
-        
-        print(f"\n{faster} is {speedup:.1f}% faster")
-        print(f"Speed difference: {abs(hybrid_mean - large_mean):.2f} ms")
+        # Find fastest model
+        if len(valid_results) > 1:
+            sorted_models = sorted(valid_results.items(), key=lambda x: x[1]['mean'])
+            fastest_name, fastest_stats = sorted_models[0]
+            slowest_name, slowest_stats = sorted_models[-1]
+            
+            speedup = (slowest_stats['mean'] / fastest_stats['mean'] - 1) * 100
+            print(f"\n{fastest_name} is fastest at {fastest_stats['mean']:.2f} ms")
+            print(f"{slowest_name} is slowest at {slowest_stats['mean']:.2f} ms")
+            print(f"{fastest_name} is {speedup:.1f}% faster than {slowest_name}")
     
     print(f"\n{'='*60}")
     
     # Optionally show output visualization (uncomment if needed)
-    plt.figure(figsize=(12, 5))
-    plt.subplot(1, 2, 1)
-    plt.imshow(output_hybrid)
-    plt.title("DPT_Hybrid Output")
-    plt.axis('off')
-    plt.subplot(1, 2, 2)
-    plt.imshow(output_large)
-    plt.title("DPT_Large Output")
-    plt.axis('off')
-    plt.tight_layout()
-    plt.show()
+    valid_outputs = {k: v for k, v in outputs.items() if v is not None}
+    if len(valid_outputs) > 0:
+        num_models = len(valid_outputs)
+        plt.figure(figsize=(6 * num_models, 5))
+        for idx, (model_name, output) in enumerate(valid_outputs.items(), 1):
+            plt.subplot(1, num_models, idx)
+            plt.imshow(output)
+            plt.title(f"{model_name} Output")
+            plt.axis('off')
+        plt.tight_layout()
+        plt.show()
 
 
 if __name__ == "__main__":
