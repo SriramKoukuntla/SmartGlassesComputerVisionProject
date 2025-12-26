@@ -1,8 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from ultralytics import YOLO
-from pathlib import Path
 from app.pipeline.detect_base64 import handle_detect_base64
+from app.models import yolo11n
 
 app = FastAPI()
 
@@ -15,13 +14,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load YOLOv11n model
-# Model path is relative to backend directory
-MODEL_PATH = Path(__file__).parent.parent / "yolo11n.pt"
-print("Loading YOLOv11n model...")
-model = YOLO(str(MODEL_PATH))
-print("Model loaded successfully!")
-
 @app.get("/")
 def read_root():
     return {"message": "Smart Glasses Backend API", "status": "running"}
@@ -29,7 +21,7 @@ def read_root():
 @app.post("/detect-base64")
 async def detect_objects_base64(data: dict):
     """Process a base64 encoded image and return object detections"""
-    return handle_detect_base64(data, model)
+    return handle_detect_base64(data, yolo11n)
 
 if __name__ == "__main__":
     import uvicorn
