@@ -1,8 +1,8 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
 from pathlib import Path
-from app.pipeline.detect import detect_objects
+from app.pipeline.detect_base64 import handle_detect_base64
 
 app = FastAPI()
 
@@ -28,21 +28,8 @@ def read_root():
 
 @app.post("/detect-base64")
 async def detect_objects_base64(data: dict):
-    """
-    Process a base64 encoded image and return object detections
-    """
-    try:
-        # Extract base64 image data
-        image_data = data.get("image")
-        
-        # Call the detection pipeline function
-        result = detect_objects(image_data, model)
-        return result
-    
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
+    """Process a base64 encoded image and return object detections"""
+    return handle_detect_base64(data, model)
 
 if __name__ == "__main__":
     import uvicorn
