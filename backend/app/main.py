@@ -1,8 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.pipeline.detect_base64 import handle_detect_base64
-from app.pipeline.ocr_base64 import handle_ocr_base64
-from app.models import yolo11n, paddleocr_en
+from app.models import load_models
+from app.pipeline.input_image_base64 import handle_input_image_base64
 
 app = FastAPI()
 
@@ -15,22 +14,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+yolo11n, paddleocr_en = load_models()
+
 @app.get("/")
 def read_root():
     return {"message": "Smart Glasses Backend API", "status": "running"}
 
-@app.post("/detect-base64")
-async def detect_objects_base64(data: dict):
-    """Process a base64 encoded image and return object detections"""
-    return handle_detect_base64(data, yolo11n)
-
-@app.post("/ocr-base64")
-async def ocr_base64(data: dict):
-    """Process a base64 encoded image and return extracted text"""
-    return handle_ocr_base64(data, paddleocr_en)
+@app.post("/input-image-base64")
+async def input_image_base64(data: dict):
+    return handle_input_image_base64(data, yolo11n, paddleocr_en)
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
-

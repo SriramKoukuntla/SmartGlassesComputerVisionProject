@@ -23,27 +23,10 @@ def load_yolo_model(model_name: str) -> YOLO:
     return model
 
 def load_paddleocr_model(use_angle_cls: bool = False, lang: str = "en") -> PaddleOCR:
-    print(f"Initializing PaddleOCR model (lang={lang})...")
+    print(f"Initializing PaddleOCR model ")
     ocr = PaddleOCR(
-        lang="en",                 # language
-        use_angle_cls=True,        # handles rotated text
-        det=True,                  # text detection
-        rec=True,                  # text recognition
-        cls=True,                  # angle classifier
-        use_gpu=True,              # set False if no GPU
-        det_db_score_mode="slow",  # more accurate box filtering
-        show_log=False             # silence paddle logs
-    )
+        use_doc_orientation_classify=True,
+        use_doc_unwarping=True,
+        use_textline_orientation=True)
     print("PaddleOCR model initialized successfully!")
-    return ocr_model
-
-
-
-
-
-# Load default models
-yolo11n = load_yolo_model("yolo11n.pt")
-paddleocr_en = load_paddleocr_model(lang="en")
-
-__all__ = ["load_yolo_model", "load_paddleocr_model", "yolo11n", "paddleocr_en"]
-
+    return ocr

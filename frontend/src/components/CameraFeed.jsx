@@ -12,7 +12,9 @@ const CameraFeed = () => {
   const [selectedDeviceId, setSelectedDeviceId] = useState('')
   const [detections, setDetections] = useState([])
   const [currentFrameDetections, setCurrentFrameDetections] = useState([])
+  const [ocrTextDetections, setOcrTextDetections] = useState([])
   const [isProcessing, setIsProcessing] = useState(false)
+  const [flipImage, setFlipImage] = useState(false)
   const detectionIntervalRef = useRef(null)
   
   const API_URL = 'http://localhost:8000'
@@ -55,8 +57,17 @@ const CameraFeed = () => {
       canvas.width = video.videoWidth
       canvas.height = video.videoHeight
 
-      // Draw current video frame to canvas
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      // Draw current video frame to canvas (with optional flip)
+      if (flipImage) {
+        // Flip horizontally by scaling and translating
+        ctx.save()
+        ctx.translate(canvas.width, 0)
+        ctx.scale(-1, 1)
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        ctx.restore()
+      } else {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      }
 
       // Convert canvas to base64
       const imageData = canvas.toDataURL('image/jpeg', 0.8)
@@ -64,7 +75,7 @@ const CameraFeed = () => {
       setIsProcessing(true)
 
       // Send to backend API
-      const response = await fetch(`${API_URL}/detect-base64`, {
+      const response = await fetch(`${API_URL}/input-image-base64`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -78,17 +89,31 @@ const CameraFeed = () => {
 
       const data = await response.json()
 
+      // Extract YOLO detections from the new API response structure
+      const yoloDetections = data.yolo_result?.detections || []
+      const ocrResults = data.paddleocr_result || null
+      const ocrTextDetections = ocrResults?.text_detections || []
+
       // Update detections state for terminal
-      if (data.detections && data.detections.length > 0) {
+      if (yoloDetections.length > 0) {
         setDetections(prev => {
           // Keep last 50 detections
-          const newDetections = [...prev, ...data.detections]
+          const newDetections = [...prev, ...yoloDetections]
           return newDetections.slice(-50)
         })
         // Store current frame detections for drawing boxes
-        setCurrentFrameDetections(data.detections)
+        setCurrentFrameDetections(yoloDetections)
       } else {
         setCurrentFrameDetections([])
+      }
+
+      // Update OCR text detections state for terminal
+      if (ocrTextDetections.length > 0) {
+        setOcrTextDetections(prev => {
+          // Keep last 50 OCR detections
+          const newOcrDetections = [...prev, ...ocrTextDetections]
+          return newOcrDetections.slice(-50)
+        })
       }
     } catch (err) {
       console.error('Error detecting objects:', err)
@@ -175,6 +200,7 @@ const CameraFeed = () => {
     // Clear detections and boxes
     setCurrentFrameDetections([])
     setDetections([])
+    setOcrTextDetections([])
     
     // Clear overlay canvas
     if (overlayCanvasRef.current) {
@@ -267,15 +293,24 @@ const CameraFeed = () => {
       // Clear previous drawings
       ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height)
 
-      // Draw bounding boxes (accounting for video mirroring)
+      // Draw bounding boxes (accounting for video mirroring/flipping)
       currentFrameDetections.forEach((detection) => {
         const { bbox, class: className, confidence } = detection
 
         // Scale bounding box coordinates to display size
-        // Mirror horizontally: x = width - x (because video is mirrored)
-        const x1 = videoDisplayWidth - (bbox.x2 * scaleX)
+        // If video is mirrored (flipImage = false), mirror the x coordinates
+        // If video is not mirrored (flipImage = true), use coordinates as-is
+        let x1, x2
+        if (flipImage) {
+          // Video is not mirrored, use coordinates directly
+          x1 = bbox.x1 * scaleX
+          x2 = bbox.x2 * scaleX
+        } else {
+          // Video is mirrored, flip x coordinates
+          x1 = videoDisplayWidth - (bbox.x2 * scaleX)
+          x2 = videoDisplayWidth - (bbox.x1 * scaleX)
+        }
         const y1 = bbox.y1 * scaleY
-        const x2 = videoDisplayWidth - (bbox.x1 * scaleX)
         const y2 = bbox.y2 * scaleY
         const width = x2 - x1
         const height = y2 - y1
@@ -314,7 +349,7 @@ const CameraFeed = () => {
 
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
-  }, [currentFrameDetections])
+  }, [currentFrameDetections, flipImage])
 
   return (
     <div className="camera-container">
@@ -334,6 +369,9 @@ const CameraFeed = () => {
               playsInline
               muted
               className="camera-video"
+              style={{
+                transform: flipImage ? 'scaleX(1)' : 'scaleX(-1)'
+              }}
             />
             <canvas 
               ref={overlayCanvasRef} 
@@ -384,6 +422,15 @@ const CameraFeed = () => {
               Start Camera
             </button>
           )}
+          {isStreaming && (
+            <button
+              onClick={() => setFlipImage(!flipImage)}
+              className={`control-button ${flipImage ? 'flip-active' : ''}`}
+              title="Flip image horizontally"
+            >
+              {flipImage ? '🔄 Flip: ON' : '🔄 Flip: OFF'}
+            </button>
+          )}
         </div>
 
         {isStreaming && (
@@ -395,6 +442,7 @@ const CameraFeed = () => {
 
         <DetectionTerminal 
           detections={detections} 
+          ocrTextDetections={ocrTextDetections}
           isProcessing={isProcessing}
         />
       </div>
