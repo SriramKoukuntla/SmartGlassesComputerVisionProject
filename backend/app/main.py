@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.pipeline.detect_base64 import handle_detect_base64
-from app.models import yolo11n
+from app.pipeline.ocr_base64 import handle_ocr_base64
+from app.models import yolo11n, paddleocr_en
 
 app = FastAPI()
 
@@ -22,6 +23,11 @@ def read_root():
 async def detect_objects_base64(data: dict):
     """Process a base64 encoded image and return object detections"""
     return handle_detect_base64(data, yolo11n)
+
+@app.post("/ocr-base64")
+async def ocr_base64(data: dict):
+    """Process a base64 encoded image and return extracted text"""
+    return handle_ocr_base64(data, paddleocr_en)
 
 if __name__ == "__main__":
     import uvicorn

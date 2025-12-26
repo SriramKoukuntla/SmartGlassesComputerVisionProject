@@ -1,6 +1,6 @@
 # Smart Glasses Backend
 
-Backend API for object detection using YOLOv11n.
+Backend API for object detection using YOLOv11n and OCR using PaddleOCR.
 
 ## Setup
 
@@ -9,7 +9,9 @@ Backend API for object detection using YOLOv11n.
 pip install -r requirements.txt
 ```
 
-2. The YOLOv11n model will be automatically downloaded on first run (yolo11n.pt).
+2. Models will be automatically downloaded on first run:
+   - YOLOv11n model (yolo11n.pt) for object detection
+   - PaddleOCR models for text recognition (downloaded automatically)
 
 3. Start the server:
 ```bash
@@ -26,8 +28,8 @@ The API will be available at `http://localhost:8000`
 ## API Endpoints
 
 - `GET /` - Health check
-- `POST /detect` - Detect objects in uploaded image file
 - `POST /detect-base64` - Detect objects in base64 encoded image
+- `POST /ocr-base64` - Extract text from base64 encoded image
 
 ## API Documentation
 
