@@ -14,7 +14,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-yolo11n, paddleocr_en, midas = load_models()
+yolo11n, paddleocr_en, midas, midas_transforms, midas_device = load_models()
 
 @app.get("/")
 def read_root():
@@ -22,7 +22,7 @@ def read_root():
 
 @app.post("/input-image-base64")
 async def input_image_base64(data: dict):
-    return handle_input_image_base64(data, yolo11n, paddleocr_en, midas)
+    return handle_input_image_base64(data, yolo11n, paddleocr_en, midas, midas_transforms, midas_device)
 
 if __name__ == "__main__":
     import uvicorn

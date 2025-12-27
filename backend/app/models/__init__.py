@@ -7,16 +7,16 @@ from ultralytics import YOLO
 from paddleocr import PaddleOCR
 
 
-
 YOLO_MODEL_NAME = "yolo11n.pt"
-MIDAS_MODEL_NAME = "DPT_Hybrid"
+MidasModels = ["DPT_Large", "DPT_Hybrid", "MiDaS_small"]
+MIDAS_MODEL_NAME = MidasModels[2]
 
 
 def load_models():
     yolo11n = load_yolo_model(YOLO_MODEL_NAME)
     paddleocr = load_paddleocr_model(lang="en")
-    midas = load_MiDaS_model()
-    return yolo11n, paddleocr, midas
+    midas, midas_transforms, midas_device = load_MiDaS_model()
+    return yolo11n, paddleocr, midas, midas_transforms, midas_device
 
 def load_yolo_model(model_name: str) -> YOLO:
     model_path = Path(__file__).parent / model_name
@@ -41,10 +41,24 @@ def load_MiDaS_model() -> MiDaS:
     midas = torch.hub.load("intel-isl/MiDaS", MIDAS_MODEL_NAME)
     print("MiDaS model loaded successfully!")
     if torch.cuda.is_available():
-        midas.to(torch.device("cuda"))
+        device = torch.device("cuda")
         print("MiDaS model moved to GPU")
     else:
-        midas.to(torch.device("cpu"))
+        device = torch.device("cpu")
         print("MiDaS model moved to CPU")
+    midas.to(device)
     midas.eval()
-    return midas
+    
+    midas_transforms = torch.hub.load("intel-isl/MiDaS", "transforms")
+
+    print("Loading MiDaS preprocessing pipeline...")
+    if  MIDAS_MODEL_NAME == "DPT_Large" or MIDAS_MODEL_NAME == "DPT_Hybrid":
+        transform = midas_transforms.dpt_transform
+    else:
+        transform = midas_transforms.small_transform
+    print("MiDaS preprocessing pipeline loaded successfully!")
+
+    return midas, transform, device
+
+
+

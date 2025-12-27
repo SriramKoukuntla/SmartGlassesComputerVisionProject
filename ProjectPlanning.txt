@@ -1,0 +1,110 @@
+Layer 1 — Sensor Ingest
+ - Raw video stream (camera frames + timestamps)
+ - (Optional but recommended later) audio stream (mic)
+
+Layer 2 — Perception Models (fast, frame-level)
+    2A: Object detection
+     - YOLO (general objects)
+    (Optional specialists, run less frequently or as a second head)
+     - crosswalk/pedestrian signals, doors/handles, stairs/curbs, etc.
+
+    2B: Multi-object tracking (adds time consistency)
+     - ByteTrack (or DeepSORT) (Output: stable track IDs, trajectories, velocity/approach cues)
+
+    2C: Text understanding
+     - PaddleOCR (text detector + OCR)
+
+    2D: Depth / geometry
+     - MiDaS
+    (Optional) segmentation (high value for navigation)
+    walkable area (floor/sidewalk), obstacles, curb/stairs regions
+
+Layer 2.5 — Risk & Prioritization (cheap logic)
+    - Compute risk scores and priority queue of events:
+        - proximity / depth change (approaching)
+        - location relative to walkable path
+        - class weights (car > person > chair)
+        - OCR novelty (new sign / changed text)
+
+Layer 3 - Scene Reasoning + Language (LLM)
+    - LLM responsibilities:
+    - generate short, consistent descriptions
+    - answer user questions (“what does that sign say?”)
+    - choose phrasing appropriate for visually-impaired navigation
+
+Layer 4 - Memory, Novelty, and Event Gating
+    - 
+
+
+
+Compute risk scores and priority queue of events:
+
+proximity / depth change (approaching)
+
+location relative to walkable path
+
+class weights (car > person > chair)
+
+OCR novelty (new sign / changed text)
+
+Output: top N “things that matter now”
+
+Layer 3 — Scene Reasoning + Language (LLM)
+
+Instead of sending raw model outputs every frame:
+
+Feed the LLM a compact, structured scene graph + event list
+
+LLM responsibilities:
+
+generate short, consistent descriptions
+
+answer user questions (“what does that sign say?”)
+
+choose phrasing appropriate for visually-impaired navigation
+
+avoid speculation beyond sensor evidence
+
+Layer 4 — Memory, Novelty, and Event Gating (replaces “sentiment transformer”)
+
+This layer decides whether to speak and what changed.
+
+Maintain world state memory:
+
+last spoken hazards
+
+active tracked objects + their last announced status
+
+last OCR results (dedupe + cooldown)
+
+Trigger speech only on:
+
+new object entering a danger zone
+
+object approaching quickly
+
+obstacle appears in the walkable path
+
+new high-confidence OCR text
+
+user request / interaction
+
+Includes:
+
+cooldown timers (“don’t repeat ‘person ahead’ every second”)
+
+change thresholds (distance delta, heading delta, new track ID)
+
+Layer 5 — Output & Interaction
+
+TTS with priority + interruptibility:
+
+hazards interrupt general narration
+
+Two modes:
+
+Navigation mode (short commands: “Stop. Obstacle ahead.”)
+
+Description mode (richer: “You’re in a hallway, door on your right…”)
+
+Optional: haptics / tones for urgent alerts

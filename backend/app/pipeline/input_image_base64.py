@@ -12,10 +12,13 @@ def handle_input_image_base64(data: dict, yolo11n: YOLO, paddleocr_en: PaddleOCR
 
         yolo_JSON = executeYolo(img, yolo11n)
         paddleocr_JSON = executePaddleOcr(img, paddleocr_en)
+        midas_JSON = executeMiDaS(img, midas)
+
         
         return {
             "yolo_result": yolo_JSON,
-            "paddleocr_result": paddleocr_JSON
+            "paddleocr_result": paddleocr_JSON,
+            "midas_result": midas_JSON
         }
  
     except ValueError as e:
