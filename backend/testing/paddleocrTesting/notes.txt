@@ -1,3 +1,0 @@
-After library installation with gpu support OCR prediction latency speed up ~100x.
-Before GPU Support: 6890 ms detection latency after ocr initial model recognition warm up 
-After GPU Support: 67.58 ms detection latency after ocr initial model recognition warm up

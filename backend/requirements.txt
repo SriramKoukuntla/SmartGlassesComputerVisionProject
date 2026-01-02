@@ -1,15 +1,11 @@
-torch
-torchvision
-# Note: Install PyTorch with CUDA 13.0 from: pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu130
-ultralytics>=8.0.0
-fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
-python-multipart>=0.0.6
-pillow>=10.0.0
-numpy>=1.24.0
-opencv-python>=4.8.0
-paddlepaddle-gpu==3.2.1
-# Note: Install paddlepaddle-gpu from: pip install paddlepaddle-gpu==3.2.1 -i https://www.paddlepaddle.org.cn/packages/stable/cu129/
-paddleocr>=2.7.0
-timm
-
+# ultralytics>=8.0.0
+# fastapi>=0.104.0
+# uvicorn[standard]>=0.24.0
+# python-multipart>=0.0.6
+# pillow>=10.0.0
+# numpy>=1.24.0
+# opencv-python>=4.8.0
+# paddleocr>=2.7.0
+# timm
+#Download PyTorch with CUDA from: https://pytorch.org/get-started/locally/
+#Download padlepadle with CUDA from: https://www.paddlepaddle.org.cn/documentation/docs/en/install/index_en.html
