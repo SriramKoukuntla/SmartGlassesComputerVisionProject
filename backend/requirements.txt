@@ -1,11 +1,43 @@
-# ultralytics>=8.0.0
-# fastapi>=0.104.0
-# uvicorn[standard]>=0.24.0
-# python-multipart>=0.0.6
-# pillow>=10.0.0
-# numpy>=1.24.0
-# opencv-python>=4.8.0
-# paddleocr>=2.7.0
-# timm
-#Download PyTorch with CUDA from: https://pytorch.org/get-started/locally/
-#Download padlepadle with CUDA from: https://www.paddlepaddle.org.cn/documentation/docs/en/install/index_en.html
+# Core dependencies
+ultralytics>=8.0.0  # YOLO object detection (PyTorch-based)
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+pillow>=10.0.0
+numpy>=1.24.0
+opencv-python>=4.8.0
+
+# PyTorch ecosystem
+# Note: Install PyTorch with CUDA from: https://pytorch.org/get-started/locally/
+# Example: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+torch>=2.0.0
+torchvision>=0.15.0
+timm>=0.9.0  # For segmentation models
+
+# OCR - PyTorch-based (EasyOCR)
+easyocr>=1.7.0  # EasyOCR - PyTorch-based OCR with detection + recognition
+
+# Multi-object tracking
+# byte-track (if using ByteTrack: pip install byte-track)
+# deepsort (if using DeepSORT: pip install deepsort-pytorch)
+
+# Depth estimation
+# MiDaS is loaded via torch.hub, no separate install needed
+
+# LLM integration (optional)
+openai>=1.0.0  # For OpenAI API
+anthropic>=0.18.0  # For Anthropic Claude API
+# For local LLMs, use appropriate libraries (e.g., transformers, llama-cpp-python)
+
+# TTS
+pyttsx3>=2.90  # Offline TTS (works on Windows/Linux/Mac)
+gtts>=2.5.0  # Google TTS (requires internet)
+pygame>=2.5.0  # For audio playback with gTTS
+
+# Additional utilities
+dataclasses>=0.8; python_version<"3.7"  # For older Python versions
+
+# Note: PyTorch with CUDA must be installed separately based on your system:
+# Visit https://pytorch.org/get-started/locally/ for installation instructions
+# Example for CUDA 11.8:
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
