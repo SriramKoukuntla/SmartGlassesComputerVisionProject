@@ -17,6 +17,7 @@ const CameraFeed = () => {
   const [isProcessing, setIsProcessing] = useState(false)
   const [flipImage, setFlipImage] = useState(false)
   const [requestInterval, setRequestInterval] = useState(500) // milliseconds between requests
+  const [backendLogs, setBackendLogs] = useState([])
   const detectionIntervalRef = useRef(null)
   
   const API_URL = 'http://localhost:8000'
@@ -50,8 +51,15 @@ const CameraFeed = () => {
   const captureAndDetect = useCallback(async () => {
     if (!videoRef.current || !canvasRef.current || isProcessing) return
 
+    const video = videoRef.current
+    
+    // Check if video is ready and has valid dimensions
+    if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) {
+      // Video not ready yet, skip this frame
+      return
+    }
+
     try {
-      const video = videoRef.current
       const canvas = canvasRef.current
       const ctx = canvas.getContext('2d')
 
@@ -77,19 +85,53 @@ const CameraFeed = () => {
       setIsProcessing(true)
 
       // Send to backend API
-      const response = await fetch(`${API_URL}/input-image-base64`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ image: imageData }),
-      })
+      let response
+      try {
+        response = await fetch(`${API_URL}/input-image-base64`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ image: imageData }),
+        })
+      } catch (fetchError) {
+        console.error('Network error:', fetchError)
+        setBackendLogs(prev => {
+          const newLogs = [...prev, `[ERROR] Network error: ${fetchError.message}. Is the backend API server running on ${API_URL}?`]
+          return newLogs.slice(-100)
+        })
+        throw fetchError
+      }
 
       if (!response.ok) {
-        throw new Error('Detection request failed')
+        const errorText = await response.text()
+        console.error('API error:', response.status, errorText)
+        setBackendLogs(prev => {
+          const newLogs = [...prev, `[ERROR] API request failed: ${response.status} ${response.statusText}`]
+          return newLogs.slice(-100)
+        })
+        throw new Error(`Detection request failed: ${response.status} ${response.statusText}`)
       }
 
       const data = await response.json()
+      
+      // Log any errors from backend
+      if (data.error) {
+        console.error('Backend error:', data.error)
+        setBackendLogs(prev => {
+          const newLogs = [...prev, `[ERROR] ${data.error}`]
+          return newLogs.slice(-100)
+        })
+      }
+
+      // Extract logs from backend
+      if (data.logs && Array.isArray(data.logs)) {
+        setBackendLogs(prev => {
+          // Keep last 100 logs
+          const newLogs = [...prev, ...data.logs]
+          return newLogs.slice(-100)
+        })
+      }
 
       // Extract YOLO detections from the new API response structure
       const yoloDetections = data.yolo_result?.detections || []
@@ -130,19 +172,80 @@ const CameraFeed = () => {
 
   // Track if camera was explicitly stopped by user
   const cameraStoppedRef = useRef(false)
+  const streamRef = useRef(null)
+
+  // Handle video stream events
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+
+    const handleLoadedMetadata = () => {
+      // Stream is ready
+      setIsStreaming(true)
+      setError(null)
+    }
+
+    const handleError = (e) => {
+      console.error('Video element error:', e)
+      setError('Video stream error. Trying to reconnect...')
+      setIsStreaming(false)
+      // Try to restart camera after a short delay
+      setTimeout(() => {
+        if (!cameraStoppedRef.current && selectedDeviceId) {
+          // Trigger restart by updating a dependency
+          setSelectedDeviceId(prev => prev) // This will trigger the camera useEffect
+        }
+      }, 1000)
+    }
+
+    const handleEnded = () => {
+      console.warn('Video stream ended unexpectedly')
+      setError('Camera stream ended. Trying to reconnect...')
+      setIsStreaming(false)
+      // Try to restart camera
+      if (!cameraStoppedRef.current && selectedDeviceId) {
+        setTimeout(() => {
+          setSelectedDeviceId(prev => prev)
+        }, 1000)
+      }
+    }
+
+    video.addEventListener('loadedmetadata', handleLoadedMetadata)
+    video.addEventListener('error', handleError)
+    video.addEventListener('ended', handleEnded)
+
+    return () => {
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata)
+      video.removeEventListener('error', handleError)
+      video.removeEventListener('ended', handleEnded)
+    }
+  }, [selectedDeviceId])
 
   useEffect(() => {
     let stream = null
+    let isMounted = true
 
     const startCamera = async () => {
       // Don't auto-start if user explicitly stopped the camera
-      if (!selectedDeviceId || cameraStoppedRef.current) return
+      if (!selectedDeviceId || cameraStoppedRef.current || !isMounted) return
 
       try {
         // Stop existing stream if any
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => {
+            track.stop()
+            track.enabled = false
+          })
+          streamRef.current = null
+        }
+
         if (videoRef.current && videoRef.current.srcObject) {
           const existingStream = videoRef.current.srcObject
-          existingStream.getTracks().forEach(track => track.stop())
+          existingStream.getTracks().forEach(track => {
+            track.stop()
+            track.enabled = false
+          })
+          videoRef.current.srcObject = null
         }
 
         // Clear any existing detection interval
@@ -160,6 +263,39 @@ const CameraFeed = () => {
           }
         })
 
+        if (!isMounted) {
+          // Component unmounted, stop the stream
+          stream.getTracks().forEach(track => track.stop())
+          return
+        }
+
+        // Store stream reference
+        streamRef.current = stream
+
+        // Add event listeners to track stream state
+        stream.getTracks().forEach(track => {
+          track.onended = () => {
+            console.warn('Camera track ended:', track.kind)
+            if (!cameraStoppedRef.current && isMounted) {
+              setError('Camera track ended. Trying to reconnect...')
+              setIsStreaming(false)
+              setTimeout(() => {
+                if (isMounted && !cameraStoppedRef.current) {
+                  setSelectedDeviceId(prev => prev)
+                }
+              }, 1000)
+            }
+          }
+
+          track.onerror = (e) => {
+            console.error('Camera track error:', e)
+            if (!cameraStoppedRef.current && isMounted) {
+              setError('Camera track error. Trying to reconnect...')
+              setIsStreaming(false)
+            }
+          }
+        })
+
         if (videoRef.current) {
           videoRef.current.srcObject = stream
           setIsStreaming(true)
@@ -168,13 +304,17 @@ const CameraFeed = () => {
 
           // Start detection loop with configurable interval
           detectionIntervalRef.current = setInterval(() => {
-            captureAndDetect()
+            if (isMounted && videoRef.current && videoRef.current.readyState >= 2) {
+              captureAndDetect()
+            }
           }, requestInterval)
         }
       } catch (err) {
         console.error('Error accessing camera:', err)
-        setError('Unable to access camera. Please ensure you have granted camera permissions.')
-        setIsStreaming(false)
+        if (isMounted) {
+          setError(`Unable to access camera: ${err.message}. Please ensure you have granted camera permissions.`)
+          setIsStreaming(false)
+        }
       }
     }
 
@@ -182,17 +322,28 @@ const CameraFeed = () => {
       startCamera()
     }
 
-    // Cleanup function to stop the stream when component unmounts
+    // Cleanup function to stop the stream when component unmounts or dependencies change
     return () => {
+      isMounted = false
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => {
+          track.stop()
+          track.enabled = false
+        })
+        streamRef.current = null
+      }
       if (stream) {
-        stream.getTracks().forEach(track => track.stop())
+        stream.getTracks().forEach(track => {
+          track.stop()
+          track.enabled = false
+        })
       }
       if (detectionIntervalRef.current) {
         clearInterval(detectionIntervalRef.current)
         detectionIntervalRef.current = null
       }
     }
-  }, [selectedDeviceId, captureAndDetect, requestInterval])
+  }, [selectedDeviceId, requestInterval]) // Removed captureAndDetect from dependencies
 
   // Update detection interval when requestInterval changes (without restarting camera)
   useEffect(() => {
@@ -201,7 +352,9 @@ const CameraFeed = () => {
       clearInterval(detectionIntervalRef.current)
       // Start new interval with updated frequency
       detectionIntervalRef.current = setInterval(() => {
-        captureAndDetect()
+        if (videoRef.current && videoRef.current.readyState >= 2) {
+          captureAndDetect()
+        }
       }, requestInterval)
     }
   }, [requestInterval, isStreaming, captureAndDetect])
@@ -209,6 +362,15 @@ const CameraFeed = () => {
   const stopCamera = () => {
     // Mark camera as explicitly stopped
     cameraStoppedRef.current = true
+    
+    // Stop stream reference
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => {
+        track.stop()
+        track.enabled = false
+      })
+      streamRef.current = null
+    }
     
     if (videoRef.current && videoRef.current.srcObject) {
       const stream = videoRef.current.srcObject
@@ -232,6 +394,7 @@ const CameraFeed = () => {
     setCurrentFrameOcrDetections([])
     setDetections([])
     setOcrTextDetections([])
+    setBackendLogs([])
     
     // Clear overlay canvas
     if (overlayCanvasRef.current) {
@@ -251,9 +414,21 @@ const CameraFeed = () => {
 
     try {
       // Stop existing stream if any
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => {
+          track.stop()
+          track.enabled = false
+        })
+        streamRef.current = null
+      }
+
       if (videoRef.current && videoRef.current.srcObject) {
         const existingStream = videoRef.current.srcObject
-        existingStream.getTracks().forEach(track => track.stop())
+        existingStream.getTracks().forEach(track => {
+          track.stop()
+          track.enabled = false
+        })
+        videoRef.current.srcObject = null
       }
 
       // Clear any existing detection interval
@@ -270,6 +445,9 @@ const CameraFeed = () => {
         }
       })
 
+      // Store stream reference
+      streamRef.current = stream
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream
         setIsStreaming(true)
@@ -277,12 +455,14 @@ const CameraFeed = () => {
 
         // Start detection loop with configurable interval
         detectionIntervalRef.current = setInterval(() => {
-          captureAndDetect()
+          if (videoRef.current && videoRef.current.readyState >= 2) {
+            captureAndDetect()
+          }
         }, requestInterval)
       }
     } catch (err) {
       console.error('Error accessing camera:', err)
-      setError('Unable to access camera. Please ensure you have granted camera permissions.')
+      setError(`Unable to access camera: ${err.message}. Please ensure you have granted camera permissions.`)
       setIsStreaming(false)
     }
   }
@@ -579,6 +759,7 @@ const CameraFeed = () => {
           detections={detections} 
           ocrTextDetections={ocrTextDetections}
           isProcessing={isProcessing}
+          backendLogs={backendLogs}
         />
       </div>
     </div>

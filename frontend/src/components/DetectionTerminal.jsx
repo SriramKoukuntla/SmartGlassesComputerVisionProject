@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react'
 import './DetectionTerminal.css'
 
-const DetectionTerminal = ({ detections, ocrTextDetections = [], isProcessing }) => {
+const DetectionTerminal = ({ detections, ocrTextDetections = [], isProcessing, backendLogs = [] }) => {
   const terminalRef = useRef(null)
 
   useEffect(() => {
@@ -9,7 +9,7 @@ const DetectionTerminal = ({ detections, ocrTextDetections = [], isProcessing })
     if (terminalRef.current) {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight
     }
-  }, [detections, ocrTextDetections])
+  }, [detections, ocrTextDetections, backendLogs])
 
   const formatTimestamp = () => {
     const now = new Date()
@@ -37,13 +37,25 @@ const DetectionTerminal = ({ detections, ocrTextDetections = [], isProcessing })
         </div>
       </div>
       <div className="terminal-body" ref={terminalRef}>
-        {detections.length === 0 && ocrTextDetections.length === 0 ? (
+        {detections.length === 0 && ocrTextDetections.length === 0 && backendLogs.length === 0 ? (
           <div className="terminal-line">
             <span className="terminal-prompt">$</span>
             <span className="terminal-text">Waiting for detections...</span>
           </div>
         ) : (
           <>
+            {/* Backend logs */}
+            {backendLogs.map((log, index) => {
+              const isError = log.includes('[ERROR]')
+              const isWarning = log.includes('[WARNING]')
+              return (
+                <div key={`log-${index}`} className={`terminal-line ${isError ? 'log-error' : isWarning ? 'log-warning' : 'log-info'}`}>
+                  <span className="terminal-prompt">LOG:</span>
+                  <span className="terminal-text">{log}</span>
+                </div>
+              )
+            })}
+            {/* YOLO detections */}
             {detections.map((detection, index) => (
               <div key={`yolo-${index}`} className="terminal-line">
                 <span className="terminal-timestamp">[{formatTimestamp()}]</span>
@@ -51,6 +63,7 @@ const DetectionTerminal = ({ detections, ocrTextDetections = [], isProcessing })
                 <span className="terminal-confidence">{detection.confidence}%</span>
               </div>
             ))}
+            {/* OCR detections */}
             {ocrTextDetections.map((ocrDetection, index) => {
               // OCR detection format: [text, confidence, polygon]
               const text = Array.isArray(ocrDetection) ? ocrDetection[0] : ocrDetection.text || 'Unknown'
@@ -69,7 +82,7 @@ const DetectionTerminal = ({ detections, ocrTextDetections = [], isProcessing })
       </div>
       <div className="terminal-footer">
         <span className="terminal-count">
-          Objects: {detections.length} | Text: {ocrTextDetections.length}
+          Objects: {detections.length} | Text: {ocrTextDetections.length} | Logs: {backendLogs.length}
         </span>
       </div>
     </div>
