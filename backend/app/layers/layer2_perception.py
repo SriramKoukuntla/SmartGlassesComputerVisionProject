@@ -258,6 +258,7 @@ class TextUnderstanding:
             # 'en' for English, can add more languages: ['en', 'ch_sim', 'fr', etc.]
             # gpu=True uses GPU if available, False uses CPU
             use_gpu = (self.device == "cuda")
+            print(f"Using GPU: {use_gpu}")
             self.reader = easyocr.Reader(['en'], gpu=use_gpu, verbose=False)
             print("EasyOCR initialized successfully.")
         except ImportError:

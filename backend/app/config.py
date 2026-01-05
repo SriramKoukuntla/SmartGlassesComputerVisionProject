@@ -2,6 +2,7 @@
 import os
 from dataclasses import dataclass
 from typing import Optional
+import torch
 
 
 @dataclass
@@ -15,8 +16,9 @@ class Config:
     
     # Model settings
     yolo_model: str = "yolov8n.pt"  # Ultralytics YOLO
-    device: str = "cuda" if os.getenv("CUDA_AVAILABLE", "false").lower() == "true" else "cpu"
-    
+    # device: str = "cuda" if os.getenv("CUDA_AVAILABLE", "false").lower() == "true" else "cpu"
+    device: str = "cuda" if (os.getenv("CUDA_AVAILABLE", "").lower() != "false" and torch.cuda.is_available()) else "cpu"
+        
     # Tracking settings
     tracker_type: str = "bytetrack"  # or "deepsort"
     tracker_max_age: int = 30
