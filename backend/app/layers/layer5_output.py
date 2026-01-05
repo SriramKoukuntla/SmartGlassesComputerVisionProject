@@ -97,7 +97,9 @@ class OutputInteraction:
         )
         
         # Add to priority queue (lower priority number = higher priority)
-        self.message_queue.put((priority.value, message))
+        # Use counter as tie-breaker to ensure messages are always comparable
+        self.message_queue.put((priority.value, self._message_counter, message))
+        self._message_counter += 1
         
         # If urgent and interruptible, stop current speech
         if priority == Priority.URGENT and interruptible and self.is_speaking:
@@ -190,7 +192,7 @@ class OutputInteraction:
         while True:
             try:
                 # Get message from queue (blocking)
-                priority_value, message = self.message_queue.get(timeout=1.0)
+                priority_value, counter, message = self.message_queue.get(timeout=1.0)
                 
                 # Check if we should interrupt current speech
                 if self.is_speaking and message.priority.value < Priority.NORMAL.value:
