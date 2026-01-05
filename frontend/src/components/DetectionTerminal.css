@@ -74,7 +74,7 @@
   overflow-y: auto;
   color: #d4d4d4;
   font-size: 0.8rem;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 .terminal-body::-webkit-scrollbar {
@@ -96,25 +96,34 @@
 
 .terminal-line {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
   padding: 4px 0;
+  min-height: 1.6em;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .terminal-prompt {
   color: #27ae60;
   font-weight: bold;
+  flex-shrink: 0;
 }
 
 .terminal-text {
   color: #d4d4d4;
+  flex: 1;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
 }
 
 .terminal-timestamp {
   color: #7f8c8d;
   font-size: 0.75rem;
-  min-width: 70px;
+  min-width: 120px;
+  flex-shrink: 0;
 }
 
 .terminal-class {
@@ -123,11 +132,13 @@
   text-transform: capitalize;
   min-width: 80px;
   font-size: 0.8rem;
+  flex-shrink: 0;
 }
 
 .terminal-confidence {
   color: #e74c3c;
   font-weight: 500;
+  flex-shrink: 0;
 }
 
 .log-info {
