@@ -1,5 +1,5 @@
 """FastAPI endpoints for frontend integration."""
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -9,7 +9,7 @@ import json
 import asyncio
 import base64
 import time
-from typing import Optional, List
+from typing import Optional, List, Dict
 from app.orchestrator import SmartGlassesOrchestrator
 from app.layers.layer1_sensor import Frame
 from app.layers.layer5_output import OutputMode
@@ -33,6 +33,131 @@ frame_counter = 0
 class ImageRequest(BaseModel):
     """Request model for image input."""
     image: str  # Base64 encoded image
+
+
+class ResponseFormatter:
+    """Utility class for formatting API responses."""
+    
+    @staticmethod
+    def format_detections(perception_output) -> List[Dict]:
+        """Format YOLO detections for frontend.
+        
+        Args:
+            perception_output: Perception output from orchestrator
+            
+        Returns:
+            List of formatted detections
+        """
+        yolo_detections = []
+        for det in perception_output.detections:
+            yolo_detections.append({
+                "bbox": {
+                    "x1": float(det.bbox[0]),
+                    "y1": float(det.bbox[1]),
+                    "x2": float(det.bbox[2]),
+                    "y2": float(det.bbox[3])
+                },
+                "class": det.class_name,
+                "confidence": float(det.confidence * 100)  # Convert to percentage
+            })
+        return yolo_detections
+    
+    @staticmethod
+    def format_ocr_results(perception_output) -> List:
+        """Format OCR results for frontend.
+        
+        Args:
+            perception_output: Perception output from orchestrator
+            
+        Returns:
+            List of formatted OCR text detections
+        """
+        ocr_text_detections = []
+        for text_region in perception_output.text_regions:
+            # Convert bbox to polygon format expected by frontend
+            x1, y1, x2, y2 = text_region.bbox
+            polygon = [
+                [float(x1), float(y1)],
+                [float(x2), float(y1)],
+                [float(x2), float(y2)],
+                [float(x1), float(y2)]
+            ]
+            ocr_text_detections.append([
+                text_region.text,
+                float(text_region.confidence),
+                polygon
+            ])
+        return ocr_text_detections
+    
+    @staticmethod
+    def format_processing_response(
+        results: Dict,
+        frame_counter: int,
+        yolo_detections: List[Dict],
+        ocr_text_detections: List
+    ) -> Dict:
+        """Format complete processing response.
+        
+        Args:
+            results: Processing results from orchestrator
+            frame_counter: Current frame counter
+            yolo_detections: Formatted YOLO detections
+            ocr_text_detections: Formatted OCR results
+            
+        Returns:
+            Formatted response dictionary
+        """
+        logs = results.get("logs", [])
+        logs.append(
+            f"[{time.time():.3f}] Frame {frame_counter} processed: "
+            f"{len(yolo_detections)} objects, {len(ocr_text_detections)} text regions"
+        )
+        
+        return {
+            "yolo_result": {
+                "detections": yolo_detections
+            },
+            "paddleocr_result": {
+                "text_detections": ocr_text_detections
+            },
+            "logs": logs,
+            "frame_id": frame_counter,
+            "processing_time": results.get("processing_time", 0),
+            "fps": results.get("fps", 0)
+        }
+
+
+class ImageProcessor:
+    """Utility class for processing images from base64."""
+    
+    @staticmethod
+    def decode_base64_image(image_data: str) -> Optional[np.ndarray]:
+        """Decode base64 image string to numpy array.
+        
+        Args:
+            image_data: Base64 encoded image (may include data URL prefix)
+            
+        Returns:
+            Decoded image as numpy array, or None if decoding fails
+        """
+        try:
+            # Remove data URL prefix if present
+            if "," in image_data:
+                image_data = image_data.split(",")[1]
+            
+            # Decode base64 to bytes
+            image_bytes = base64.b64decode(image_data)
+            
+            # Convert bytes to numpy array
+            nparr = np.frombuffer(image_bytes, np.uint8)
+            
+            # Decode image
+            image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            
+            return image
+        except Exception as e:
+            print(f"Error decoding image: {e}")
+            return None
 
 
 @app.on_event("startup")
@@ -66,11 +191,21 @@ async def health():
 @app.post("/mode")
 async def set_mode(mode: str):
     """Set output mode (navigation or description)."""
-    if orchestrator:
-        output_mode = OutputMode.NAVIGATION if mode == "navigation" else OutputMode.DESCRIPTION
-        orchestrator.set_output_mode(output_mode)
-        return {"status": "success", "mode": mode}
-    return {"status": "error", "message": "Orchestrator not initialized"}
+    if not orchestrator:
+        raise HTTPException(
+            status_code=503,
+            detail="Orchestrator not initialized"
+        )
+    
+    if mode not in ["navigation", "description"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Mode must be 'navigation' or 'description'"
+        )
+    
+    output_mode = OutputMode.NAVIGATION if mode == "navigation" else OutputMode.DESCRIPTION
+    orchestrator.set_output_mode(output_mode)
+    return {"status": "success", "mode": mode}
 
 
 @app.websocket("/ws/video")
@@ -108,10 +243,25 @@ async def get_detections():
 async def ask_question(question: str):
     """Ask a question about the current scene."""
     if not orchestrator:
-        return {"error": "Orchestrator not initialized"}
+        raise HTTPException(
+            status_code=503,
+            detail="Orchestrator not initialized"
+        )
     
-    answer = orchestrator.answer_question(question)
-    return {"question": question, "answer": answer}
+    if not question or not question.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Question cannot be empty"
+        )
+    
+    try:
+        answer = orchestrator.answer_question(question)
+        return {"question": question, "answer": answer}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error answering question: {str(e)}"
+        )
 
 
 @app.post("/input-image-base64")
@@ -123,101 +273,50 @@ async def process_image_base64(request: ImageRequest):
     global frame_counter
     
     if not orchestrator:
-        return {
-            "error": "Orchestrator not initialized",
-            "logs": ["[ERROR] Orchestrator not initialized"]
-        }
+        raise HTTPException(
+            status_code=503,
+            detail="Orchestrator not initialized"
+        )
     
     try:
         # Decode base64 image
-        # Format: "data:image/jpeg;base64,/9j/4AAQSkZJRg..."
-        image_data = request.image
-        if "," in image_data:
-            # Remove data URL prefix if present
-            image_data = image_data.split(",")[1]
-        
-        # Decode base64 to bytes
-        image_bytes = base64.b64decode(image_data)
-        
-        # Convert bytes to numpy array
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        
-        # Decode image
-        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        image = ImageProcessor.decode_base64_image(request.image)
         
         if image is None:
-            return {
-                "error": "Failed to decode image",
-                "logs": ["[ERROR] Failed to decode image from base64"]
-            }
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to decode image from base64"
+            )
         
         # Process image through orchestrator
         frame_counter += 1
         results = orchestrator.process_image(image, frame_id=frame_counter)
         
-        # Get perception output from results (already processed, no need to process again)
+        # Get perception output from results
         perception_output = results.get("perception_output")
         if perception_output is None:
             # Fallback: process again if not in results (shouldn't happen)
             perception_output = orchestrator.perception.process_frame(image)
         
-        # Format YOLO detections for frontend
-        yolo_detections = []
-        for det in perception_output.detections:
-            yolo_detections.append({
-                "bbox": {
-                    "x1": float(det.bbox[0]),
-                    "y1": float(det.bbox[1]),
-                    "x2": float(det.bbox[2]),
-                    "y2": float(det.bbox[3])
-                },
-                "class": det.class_name,
-                "confidence": float(det.confidence * 100)  # Convert to percentage
-            })
+        # Format responses
+        formatter = ResponseFormatter()
+        yolo_detections = formatter.format_detections(perception_output)
+        ocr_text_detections = formatter.format_ocr_results(perception_output)
         
-        # Format OCR results for frontend
-        ocr_text_detections = []
-        for text_region in perception_output.text_regions:
-            # Convert bbox to polygon format expected by frontend
-            x1, y1, x2, y2 = text_region.bbox
-            polygon = [
-                [float(x1), float(y1)],
-                [float(x2), float(y1)],
-                [float(x2), float(y2)],
-                [float(x1), float(y2)]
-            ]
-            ocr_text_detections.append([
-                text_region.text,
-                float(text_region.confidence),
-                polygon
-            ])
-        
-        # Prepare response with logs
-        logs = results.get("logs", [])
-        logs.append(f"[{time.time():.3f}] Frame {frame_counter} processed: "
-                   f"{len(yolo_detections)} objects, {len(ocr_text_detections)} text regions")
-        
-        return {
-            "yolo_result": {
-                "detections": yolo_detections
-            },
-            "paddleocr_result": {
-                "text_detections": ocr_text_detections
-            },
-            "logs": logs,
-            "frame_id": frame_counter,
-            "processing_time": results.get("processing_time", 0),
-            "fps": results.get("fps", 0)
-        }
+        return formatter.format_processing_response(
+            results, frame_counter, yolo_detections, ocr_text_detections
+        )
     
+    except HTTPException:
+        raise
     except Exception as e:
         error_msg = f"[ERROR] {str(e)}"
         import traceback
         traceback.print_exc()
-        return {
-            "error": str(e),
-            "logs": [error_msg]
-        }
+        raise HTTPException(
+            status_code=500,
+            detail=f"Processing error: {str(e)}"
+        )
 
 
 if __name__ == "__main__":

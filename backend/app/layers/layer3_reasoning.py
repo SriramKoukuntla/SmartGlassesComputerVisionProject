@@ -5,6 +5,17 @@ import json
 from app.config import config
 from app.layers.layer2_5_risk import RiskEvent
 
+# Constants
+SPATIAL_ALIGNMENT_THRESHOLD = 100  # pixels
+MAX_OBJECTS_IN_PROMPT = 5
+MAX_TEXT_REGIONS_IN_PROMPT = 3
+MAX_SPATIAL_RELATIONS_IN_PROMPT = 3
+MAX_OBJECTS_IN_DESCRIPTION = 3
+MAX_TEXT_REGIONS_IN_DESCRIPTION = 2
+NAVIGATION_MAX_TOKENS = 200
+DESCRIPTION_MAX_TOKENS = 500
+QUESTION_MAX_TOKENS = 150
+
 
 @dataclass
 class SceneGraph:
@@ -104,9 +115,9 @@ class SceneReasoning:
                     # Simple relative position
                     x1, y1 = obj1["location"]
                     x2, y2 = obj2["location"]
-                    if abs(x1 - x2) < 100:  # Roughly same column
+                    if abs(x1 - x2) < SPATIAL_ALIGNMENT_THRESHOLD:
                         relation = "aligned_vertically"
-                    elif abs(y1 - y2) < 100:  # Roughly same row
+                    elif abs(y1 - y2) < SPATIAL_ALIGNMENT_THRESHOLD:
                         relation = "aligned_horizontally"
                     else:
                         relation = "separate"
@@ -159,7 +170,7 @@ class SceneReasoning:
                         }
                     ],
                     temperature=self.llm_temperature,
-                    max_tokens=200 if mode == "navigation" else 500
+                    max_tokens=NAVIGATION_MAX_TOKENS if mode == "navigation" else DESCRIPTION_MAX_TOKENS
                 )
                 description = response.choices[0].message.content
                 return LLMResponse(description=description, confidence=0.9)
@@ -167,7 +178,7 @@ class SceneReasoning:
             elif self.llm_provider == "anthropic":
                 response = self.llm_client.messages.create(
                     model=self.llm_model,
-                    max_tokens=200 if mode == "navigation" else 500,
+                    max_tokens=NAVIGATION_MAX_TOKENS if mode == "navigation" else DESCRIPTION_MAX_TOKENS,
                     system=self._get_system_prompt(mode),
                     messages=[
                         {
@@ -204,7 +215,7 @@ class SceneReasoning:
         
         if scene_graph.objects:
             prompt_parts.append("\nObjects detected:")
-            for obj in scene_graph.objects[:5]:  # Top 5 objects
+            for obj in scene_graph.objects[:MAX_OBJECTS_IN_PROMPT]:
                 desc = f"- {obj['type']}"
                 if obj.get("distance"):
                     desc += f" (distance: {obj['distance']:.2f})"
@@ -215,12 +226,12 @@ class SceneReasoning:
         
         if scene_graph.text_regions:
             prompt_parts.append("\nText detected:")
-            for text in scene_graph.text_regions[:3]:  # Top 3 text regions
+            for text in scene_graph.text_regions[:MAX_TEXT_REGIONS_IN_PROMPT]:
                 prompt_parts.append(f"- \"{text['text']}\"")
         
         if scene_graph.spatial_relations:
             prompt_parts.append("\nSpatial relationships:")
-            for rel in scene_graph.spatial_relations[:3]:
+            for rel in scene_graph.spatial_relations[:MAX_SPATIAL_RELATIONS_IN_PROMPT]:
                 prompt_parts.append(f"- {rel['object1']} and {rel['object2']} are {rel['relation']}")
         
         prompt_parts.append("\nGenerate a description appropriate for visually impaired navigation.")
@@ -243,7 +254,7 @@ class SceneReasoning:
             # Rich descriptions
             if scene_graph.objects:
                 parts.append("Objects in view:")
-                for obj in scene_graph.objects[:3]:
+                for obj in scene_graph.objects[:MAX_OBJECTS_IN_DESCRIPTION]:
                     parts.append(f"{obj['type']}")
                     if obj.get("location"):
                         x, y = obj["location"]
@@ -256,7 +267,7 @@ class SceneReasoning:
             
             if scene_graph.text_regions:
                 parts.append("Text visible:")
-                for text in scene_graph.text_regions[:2]:
+                for text in scene_graph.text_regions[:MAX_TEXT_REGIONS_IN_DESCRIPTION]:
                     parts.append(f'"{text["text"]}"')
         
         description = ". ".join(parts) if parts else "No significant objects detected."
@@ -282,8 +293,8 @@ class SceneReasoning:
 
 Scene information:
 {json.dumps({
-    "objects": scene_graph.objects[:5],
-    "text_regions": scene_graph.text_regions[:3]
+    "objects": scene_graph.objects[:MAX_OBJECTS_IN_PROMPT],
+    "text_regions": scene_graph.text_regions[:MAX_TEXT_REGIONS_IN_PROMPT]
 }, indent=2)}
 
 Answer concisely based only on the detected information."""
@@ -303,7 +314,7 @@ Answer concisely based only on the detected information."""
                         }
                     ],
                     temperature=self.llm_temperature,
-                    max_tokens=150
+                    max_tokens=QUESTION_MAX_TOKENS
                 )
                 answer = response.choices[0].message.content
                 return LLMResponse(description=answer, confidence=0.8)

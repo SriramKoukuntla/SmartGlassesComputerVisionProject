@@ -6,6 +6,10 @@ from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 from app.config import config
 
+# Constants
+TRACKING_DISTANCE_THRESHOLD = 50  # pixels
+VELOCITY_CALCULATION_WINDOW = 5  # number of trajectory points
+
 # Object Detection (YOLO)
 try:
     from ultralytics import YOLO
@@ -193,7 +197,7 @@ class MultiObjectTracker:
                     last_center = track.trajectory[-1]
                     dist = np.sqrt((center[0] - last_center[0])**2 + (center[1] - last_center[1])**2)
                     
-                    if dist < best_dist and dist < 50:  # Threshold
+                    if dist < best_dist and dist < TRACKING_DISTANCE_THRESHOLD:
                         best_dist = dist
                         best_match = track_id
             
@@ -232,7 +236,7 @@ class MultiObjectTracker:
         # Calculate velocities
         for track in self.tracks.values():
             if len(track.trajectory) >= 2:
-                recent = track.trajectory[-5:]  # Last 5 points
+                recent = track.trajectory[-VELOCITY_CALCULATION_WINDOW:]
                 if len(recent) >= 2:
                     dx = recent[-1][0] - recent[0][0]
                     dy = recent[-1][1] - recent[0][1]

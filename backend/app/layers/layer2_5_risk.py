@@ -1,10 +1,21 @@
 """Layer 2.5: Risk & Prioritization - Cheap logic for computing risk scores."""
 import numpy as np
 from typing import List, Dict, Tuple, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field, field
 from collections import deque
 from app.config import config
 from app.layers.layer2_perception import Detection, Track, TextRegion, DepthMap, PerceptionOutput
+
+# Constants
+DEFAULT_CLASS_WEIGHT = 1.0
+PROXIMITY_SCORE_MULTIPLIER = 5.0
+VELOCITY_SCORE_MULTIPLIER = 2.0
+WALKABLE_PATH_OVERLAP_THRESHOLD = 0.3
+WALKABLE_PATH_OVERLAP_SCORE = 8.0
+OBSTACLE_OVERLAP_THRESHOLD = 0.5
+OBSTACLE_PRIORITY_SCORE = 15.0
+TEXT_BASE_SCORE = 2.0
+IMPORTANT_KEYWORD_BOOST = 5.0
 
 
 @dataclass
@@ -16,7 +27,7 @@ class RiskEvent:
     location: Optional[Tuple[float, float]] = None
     distance: Optional[float] = None
     velocity: Optional[Tuple[float, float]] = None
-    metadata: Dict = None
+    metadata: Dict = field(default_factory=dict)
 
 
 class RiskPrioritization:
@@ -65,7 +76,7 @@ class RiskPrioritization:
         
         # Base class weight
         class_name = detection.class_name.lower()
-        class_weight = self.CLASS_WEIGHTS.get(class_name, 1.0)
+        class_weight = self.CLASS_WEIGHTS.get(class_name, DEFAULT_CLASS_WEIGHT)
         score += class_weight * detection.confidence
         
         # Proximity / depth
@@ -78,7 +89,7 @@ class RiskPrioritization:
             if 0 <= center_y < depth.relative_depth.shape[0] and 0 <= center_x < depth.relative_depth.shape[1]:
                 relative_depth = depth.relative_depth[center_y, center_x]
                 # Lower depth value = closer = higher risk
-                proximity_score = (1.0 - relative_depth) * 5.0
+                proximity_score = (1.0 - relative_depth) * PROXIMITY_SCORE_MULTIPLIER
                 score += proximity_score
         
         # Approach velocity
@@ -87,7 +98,7 @@ class RiskPrioritization:
             velocity_magnitude = np.sqrt(vx**2 + vy**2)
             if velocity_magnitude > self.approach_velocity_threshold:
                 # Object is moving quickly
-                score += velocity_magnitude * 2.0
+                score += velocity_magnitude * VELOCITY_SCORE_MULTIPLIER
         
         # Location relative to walkable path
         if walkable_path is not None:
@@ -97,8 +108,8 @@ class RiskPrioritization:
             obj_mask[y1:y2, x1:x2] = True
             overlap = np.sum(obj_mask & walkable_path) / np.sum(obj_mask)
             
-            if overlap > 0.3:  # Object is in walkable path
-                score += 8.0
+            if overlap > WALKABLE_PATH_OVERLAP_THRESHOLD:
+                score += WALKABLE_PATH_OVERLAP_SCORE
         
         # Confidence boost
         score *= (0.5 + detection.confidence * 0.5)
@@ -115,16 +126,14 @@ class RiskPrioritization:
             Risk score
         """
         # Text is generally lower priority than objects
-        base_score = 2.0
-        
         # Boost for high confidence
-        score = base_score * text_region.confidence
+        score = TEXT_BASE_SCORE * text_region.confidence
         
         # Check for important keywords
         text_lower = text_region.text.lower()
         important_keywords = ["stop", "danger", "warning", "caution", "exit", "entrance"]
         if any(keyword in text_lower for keyword in important_keywords):
-            score += 5.0
+            score += IMPORTANT_KEYWORD_BOOST
         
         return score
     
@@ -213,10 +222,10 @@ class RiskPrioritization:
                             max(0, x1):min(walkable_path.shape[1], x2)] = True
                     overlap = np.sum(obj_mask & walkable_path) / (np.sum(obj_mask) + 1e-8)
                     
-                    if overlap > 0.5:  # Significant overlap with walkable path
+                    if overlap > OBSTACLE_OVERLAP_THRESHOLD:
                         events.append(RiskEvent(
                             event_type="obstacle",
-                            priority=15.0,  # High priority for obstacles
+                            priority=OBSTACLE_PRIORITY_SCORE,
                             description=f"Obstacle in path: {detection.class_name}",
                             location=((x1 + x2) / 2, (y1 + y2) / 2),
                             metadata={"class_name": detection.class_name}

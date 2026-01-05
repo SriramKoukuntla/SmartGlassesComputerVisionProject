@@ -7,6 +7,13 @@ from app.config import config
 from app.layers.layer2_5_risk import RiskEvent
 from app.layers.layer3_reasoning import LLMResponse
 
+# Constants
+DANGER_ZONE_DEPTH_THRESHOLD = 0.3
+HIGH_PRIORITY_THRESHOLD = 10.0
+HIGH_PRIORITY_TEXT_THRESHOLD = 5.0
+MAX_TRACK_AGE = 5.0  # seconds
+LOCATION_CHANGE_THRESHOLD = 50  # pixels
+
 
 @dataclass
 class WorldState:
@@ -70,11 +77,11 @@ class MemoryEventGating:
         # Check if object is in danger zone
         if event.distance is not None:
             # Lower distance value = closer (for normalized depth)
-            if event.distance < 0.3:  # Close threshold
+            if event.distance < DANGER_ZONE_DEPTH_THRESHOLD:
                 return True
         
         # Check if priority is high enough
-        if event.priority > 10.0:
+        if event.priority > HIGH_PRIORITY_THRESHOLD:
             return True
         
         return False
@@ -115,7 +122,7 @@ class MemoryEventGating:
                 return False  # Already announced
         
         # Check confidence (assuming it's in metadata or event priority)
-        if event.priority > 5.0:  # High priority text
+        if event.priority > HIGH_PRIORITY_TEXT_THRESHOLD:
             return True
         
         return False
@@ -144,7 +151,7 @@ class MemoryEventGating:
                 x1, y1 = event.location
                 x2, y2 = last_state["location"]
                 # Simple heading change (could be improved)
-                if abs(x1 - x2) > 50 or abs(y1 - y2) > 50:
+                if abs(x1 - x2) > LOCATION_CHANGE_THRESHOLD or abs(y1 - y2) > LOCATION_CHANGE_THRESHOLD:
                     return True
         
         return False
@@ -236,10 +243,9 @@ class MemoryEventGating:
                     self.world_state.last_ocr_results[text] = current_time
         
         # Clean up old tracks (older than max_age)
-        max_track_age = 5.0  # seconds
         tracks_to_remove = []
         for track_id, track_state in self.world_state.active_tracks.items():
-            if current_time - track_state.get("timestamp", 0) > max_track_age:
+            if current_time - track_state.get("timestamp", 0) > MAX_TRACK_AGE:
                 tracks_to_remove.append(track_id)
         
         for track_id in tracks_to_remove:
