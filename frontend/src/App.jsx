@@ -2,7 +2,7 @@ import React from 'react'
 import CameraFeed from './components/CameraFeed'
 import './App.css'
 
-function App() {
+const App = () => {
   return (
     <div className="App">
       <header className="App-header">
