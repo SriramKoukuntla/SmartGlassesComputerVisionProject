@@ -1,7 +1,9 @@
 export const API_CONFIG = {
   BASE_URL: 'http://localhost:8000',
+  WS_URL: 'ws://localhost:8000',
   ENDPOINTS: {
-    INPUT_IMAGE: '/input-image-base64',
+    INPUT_IMAGE: '/input-image-base64', // Kept for backward compatibility
+    WS_VIDEO: '/ws/video',
   },
 }
 

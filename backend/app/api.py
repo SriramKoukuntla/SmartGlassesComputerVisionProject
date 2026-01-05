@@ -210,19 +210,113 @@ async def set_mode(mode: str):
 
 @app.websocket("/ws/video")
 async def websocket_video(websocket: WebSocket):
-    """WebSocket endpoint for video stream (deprecated - frontend handles camera)."""
+    """WebSocket endpoint for video stream processing.
+    
+    Receives base64-encoded images from frontend and returns detection results.
+    Message format:
+    - Client -> Server: {"type": "frame", "image": "<base64-encoded-image>"}
+    - Server -> Client: {"type": "result", "data": {...detection results...}}
+    - Server -> Client: {"type": "error", "message": "..."}
+    """
     await websocket.accept()
     
     if not orchestrator:
+        await websocket.send_json({
+            "type": "error",
+            "message": "Orchestrator not initialized"
+        })
         await websocket.close(code=1000, reason="Orchestrator not initialized")
         return
     
-    # This endpoint is deprecated - frontend now handles camera input
-    # Keeping for backward compatibility but it won't work without backend camera
-    await websocket.send_json({
-        "error": "This endpoint is deprecated. Use /input-image-base64 instead. Frontend handles camera input."
-    })
-    await websocket.close(code=1000, reason="Deprecated endpoint")
+    global frame_counter
+    
+    try:
+        # Send connection confirmation
+        await websocket.send_json({
+            "type": "connected",
+            "message": "WebSocket connection established"
+        })
+        
+        while True:
+            # Receive message from client
+            data = await websocket.receive_json()
+            
+            if data.get("type") == "frame":
+                image_data = data.get("image")
+                if not image_data:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "No image data provided"
+                    })
+                    continue
+                
+                try:
+                    # Decode base64 image
+                    image = ImageProcessor.decode_base64_image(image_data)
+                    
+                    if image is None:
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": "Failed to decode image from base64"
+                        })
+                        continue
+                    
+                    # Process image through orchestrator
+                    frame_counter += 1
+                    results = orchestrator.process_image(image, frame_id=frame_counter)
+                    
+                    # Get perception output from results
+                    perception_output = results.get("perception_output")
+                    if perception_output is None:
+                        # Fallback: process again if not in results (shouldn't happen)
+                        perception_output = orchestrator.perception.process_frame(image)
+                    
+                    # Format responses
+                    formatter = ResponseFormatter()
+                    yolo_detections = formatter.format_detections(perception_output)
+                    ocr_text_detections = formatter.format_ocr_results(perception_output)
+                    
+                    response = formatter.format_processing_response(
+                        results, frame_counter, yolo_detections, ocr_text_detections
+                    )
+                    
+                    # Send results back to client
+                    await websocket.send_json({
+                        "type": "result",
+                        "data": response
+                    })
+                    
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": f"Processing error: {str(e)}"
+                    })
+            
+            elif data.get("type") == "ping":
+                # Respond to ping for connection keepalive
+                await websocket.send_json({
+                    "type": "pong"
+                })
+            
+            elif data.get("type") == "close":
+                # Client requested disconnect
+                break
+            
+    except WebSocketDisconnect:
+        print("WebSocket client disconnected")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": f"WebSocket error: {str(e)}"
+            })
+        except:
+            pass
+        await websocket.close(code=1011, reason=f"Server error: {str(e)}")
 
 
 @app.get("/api/detections")

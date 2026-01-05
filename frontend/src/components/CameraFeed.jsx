@@ -33,6 +33,7 @@ const CameraFeed = () => {
     currentFrameOcrDetections,
     isProcessing,
     backendLogs,
+    isConnected,
     captureAndDetect,
     startDetectionInterval,
     stopDetectionInterval,
@@ -109,6 +110,7 @@ const CameraFeed = () => {
           ocrTextDetections={ocrTextDetections}
           isProcessing={isProcessing}
           backendLogs={backendLogs}
+          isConnected={isConnected}
         />
       </div>
     </div>
