@@ -7,6 +7,14 @@
   justify-content: center;
 }
 
+.left-section {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  align-items: flex-start;
+  /* Total height: video (896px * 9/16 = 504px) + controls (~70px) + gap (15px) = ~589px */
+}
+
 .video-wrapper {
   width: 100%;
   max-width: 896px;
@@ -16,7 +24,6 @@
   overflow: hidden;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
   position: relative;
-  align-self: flex-start;
 }
 
 .camera-video {
@@ -68,31 +75,33 @@
   background: #5568d3;
 }
 
-.controls-panel {
+.controls-below-video {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 15px;
-  align-items: flex-start;
-  min-width: 200px;
-  max-width: 280px;
-  align-self: flex-start;
-  height: calc(896px * 9 / 16);
-  max-height: calc(896px * 9 / 16);
-  overflow-y: auto;
+  align-items: flex-end;
+  width: 100%;
+  max-width: 896px;
+  flex-wrap: wrap;
 }
 
-.controls {
+.terminal-panel {
   display: flex;
   flex-direction: column;
-  gap: 15px;
-  width: 100%;
+  align-items: flex-start;
+  min-width: 280px;
+  max-width: 400px;
+  align-self: flex-start;
+  /* Height matches left-section: video (896px * 9/16 = 504px) + controls (~70px) + gap (15px) */
+  height: calc((896px * 9 / 16) + 70px + 15px);
 }
 
 .camera-select-wrapper {
-  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1;
+  min-width: 200px;
 }
 
 .camera-select-label {
@@ -147,8 +156,8 @@
   cursor: pointer;
   transition: all 0.3s;
   font-weight: 600;
-  width: 100%;
   text-align: center;
+  white-space: nowrap;
 }
 
 .control-button:hover:not(:disabled) {
@@ -325,16 +334,23 @@
     align-items: center;
   }
   
-  .controls-panel {
+  .left-section {
     width: 100%;
     max-width: 896px;
     align-items: center;
   }
   
-  .controls {
-    flex-direction: row;
-    flex-wrap: wrap;
+  .controls-below-video {
+    width: 100%;
+    max-width: 896px;
     justify-content: center;
+  }
+  
+  .terminal-panel {
+    width: 100%;
+    max-width: 896px;
+    height: auto;
+    max-height: 400px;
   }
   
   .camera-select-wrapper {
@@ -344,7 +360,7 @@
   
   .control-button {
     width: auto;
-    min-width: 200px;
+    min-width: 150px;
   }
 }
 

@@ -1,9 +1,6 @@
 .detection-terminal {
   width: 100%;
-  max-width: 280px;
-  min-width: 200px;
-  flex: 1;
-  min-height: 0;
+  height: 100%;
   background: #1e1e1e;
   border-radius: 8px;
   display: flex;
@@ -11,7 +8,6 @@
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   overflow: hidden;
   font-family: 'Courier New', monospace;
-  flex-shrink: 0;
 }
 
 .terminal-header {

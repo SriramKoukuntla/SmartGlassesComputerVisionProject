@@ -627,37 +627,37 @@ const CameraFeed = () => {
 
   return (
     <div className="camera-container">
-      <div className="video-wrapper">
-        {error ? (
-          <div className="error-message">
-            <p>{error}</p>
-            <button onClick={startCamera} className="retry-button">
-              Retry
-            </button>
-          </div>
-        ) : (
-          <>
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="camera-video"
-              style={{
-                transform: flipImage ? 'scaleX(1)' : 'scaleX(-1)'
-              }}
-            />
-            <canvas 
-              ref={overlayCanvasRef} 
-              className="overlay-canvas"
-            />
-            <canvas ref={canvasRef} style={{ display: 'none' }} />
-          </>
-        )}
-      </div>
-      
-      <div className="controls-panel">
-        <div className="controls">
+      <div className="left-section">
+        <div className="video-wrapper">
+          {error ? (
+            <div className="error-message">
+              <p>{error}</p>
+              <button onClick={startCamera} className="retry-button">
+                Retry
+              </button>
+            </div>
+          ) : (
+            <>
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="camera-video"
+                style={{
+                  transform: flipImage ? 'scaleX(1)' : 'scaleX(-1)'
+                }}
+              />
+              <canvas 
+                ref={overlayCanvasRef} 
+                className="overlay-canvas"
+              />
+              <canvas ref={canvasRef} style={{ display: 'none' }} />
+            </>
+          )}
+        </div>
+        
+        <div className="controls-below-video">
           <div className="camera-select-wrapper">
             <label htmlFor="camera-select" className="camera-select-label">
               Select Camera:
@@ -706,55 +706,9 @@ const CameraFeed = () => {
             </button>
           )}
         </div>
-
-        {isStreaming && (
-          <div className="frequency-control-wrapper">
-            <label htmlFor="frequency-slider" className="frequency-label">
-              Request Frequency: {requestInterval}ms ({Math.round(1000 / requestInterval)} req/s)
-            </label>
-            <input
-              id="frequency-slider"
-              type="range"
-              min="100"
-              max="2000"
-              step="100"
-              value={requestInterval}
-              onChange={(e) => {
-                const newInterval = parseInt(e.target.value)
-                setRequestInterval(newInterval)
-              }}
-              className="frequency-slider"
-            />
-            <div className="frequency-presets">
-              <button
-                onClick={() => setRequestInterval(100)}
-                className={`frequency-preset ${requestInterval === 100 ? 'active' : ''}`}
-              >
-                Fast (10/s)
-              </button>
-              <button
-                onClick={() => setRequestInterval(500)}
-                className={`frequency-preset ${requestInterval === 500 ? 'active' : ''}`}
-              >
-                Medium (2/s)
-              </button>
-              <button
-                onClick={() => setRequestInterval(1000)}
-                className={`frequency-preset ${requestInterval === 1000 ? 'active' : ''}`}
-              >
-                Slow (1/s)
-              </button>
-            </div>
-          </div>
-        )}
-
-        {isStreaming && (
-          <div className="status-indicator">
-            <span className="status-dot"></span>
-            Camera Active
-          </div>
-        )}
-
+      </div>
+      
+      <div className="terminal-panel">
         <DetectionTerminal 
           detections={detections} 
           ocrTextDetections={ocrTextDetections}
